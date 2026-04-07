@@ -1,14 +1,15 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
-import * as Clipboard from "expo-clipboard";
+import * as DocumentPicker from "expo-document-picker";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { Image } from "expo-image";
 import { router } from "expo-router";
-import * as ExpoSpeech from "expo-speech";
 import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -24,7 +25,7 @@ import { VOICE_LANGUAGES, useSettings } from "@/context/SettingsContext";
 import { useObsidian } from "@/hooks/useObsidian";
 import { useColors } from "@/hooks/useColors";
 
-type PhotoSource = "gallery" | "clipboard" | null;
+type PhotoSource = "gallery" | "files" | null;
 
 interface PhotoData {
   uri: string;
@@ -55,17 +56,25 @@ function parseExifDate(exif: Record<string, unknown> | null | undefined): string
 
 function getVoicePlaceholder(langCode: string): string {
   switch (langCode) {
-    case "fr-FR": return "Dictez votre note ici...";
-    case "it-IT": return "Dettate la vostra nota qui...";
-    default:      return "Dictate your note here...";
+    case "fr-FR": return "Tapez ou dictez votre note ici...";
+    case "it-IT": return "Digitate o dettate la vostra nota qui...";
+    default:      return "Type or dictate your note here...";
   }
 }
 
-function getVoicePromptLabel(langCode: string): string {
+function getDictateLabel(langCode: string): string {
   switch (langCode) {
-    case "fr-FR": return "Note vocale";
-    case "it-IT": return "Nota vocale";
-    default:      return "Voice note";
+    case "fr-FR": return "Dicter une note";
+    case "it-IT": return "Dettare una nota";
+    default:      return "Dictate a note";
+  }
+}
+
+function getDictateHint(langCode: string): string {
+  switch (langCode) {
+    case "fr-FR": return "Tapez votre note, ou appuyez sur 🎤 sur le clavier pour dicter.";
+    case "it-IT": return "Digitate la nota, o premete 🎤 sulla tastiera per dettare.";
+    default:      return "Type your note, or tap 🎤 on your keyboard to dictate.";
   }
 }
 
@@ -80,10 +89,13 @@ export default function NewRecordScreen() {
   const [photo, setPhoto] = useState<PhotoData | null>(null);
   const [note, setNote] = useState("");
   const [manualDate, setManualDate] = useState(todayString());
-  const [isListening, setIsListening] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [loadingClipboard, setLoadingClipboard] = useState(false);
-  const stopListeningRef = useRef(false);
+  const [loadingFiles, setLoadingFiles] = useState(false);
+
+  // Voice modal state
+  const [voiceModalVisible, setVoiceModalVisible] = useState(false);
+  const [voiceDraft, setVoiceDraft] = useState("");
+  const voiceInputRef = useRef<TextInput>(null);
 
   const currentLang = VOICE_LANGUAGES.find((l) => l.code === settings.voiceLanguage) ?? VOICE_LANGUAGES[0];
 
@@ -101,8 +113,8 @@ export default function NewRecordScreen() {
     if (result.canceled || !result.assets?.[0]) return;
     const asset = result.assets[0];
     const exifDate = parseExifDate(asset.exif as Record<string, unknown> | null);
-    const lat = typeof asset.exif?.["GPSLatitude"] === "number" ? asset.exif["GPSLatitude"] as number : undefined;
-    const lng = typeof asset.exif?.["GPSLongitude"] === "number" ? asset.exif["GPSLongitude"] as number : undefined;
+    const lat = typeof asset.exif?.["GPSLatitude"] === "number" ? (asset.exif["GPSLatitude"] as number) : undefined;
+    const lng = typeof asset.exif?.["GPSLongitude"] === "number" ? (asset.exif["GPSLongitude"] as number) : undefined;
     setPhoto({
       uri: asset.uri,
       source: "gallery",
@@ -114,114 +126,46 @@ export default function NewRecordScreen() {
     if (exifDate) setManualDate(exifDate);
   };
 
-  const handleClipboardPaste = async () => {
-    setLoadingClipboard(true);
+  const handleFilesPick = async () => {
+    setLoadingFiles(true);
     try {
-      // On Android 10+, clipboard access is restricted to foreground apps;
-      // hasImageAsync may return false even when an image exists.
-      // We attempt getImageAsync directly with JPEG → PNG fallback.
-      let imageData: { data: string } | null = null;
-      let mimeType = "image/jpeg";
-
-      try {
-        imageData = await Clipboard.getImageAsync({ format: "jpeg" });
-      } catch {
-        imageData = null;
-      }
-
-      if (!imageData?.data) {
-        try {
-          imageData = await Clipboard.getImageAsync({ format: "png" });
-          mimeType = "image/png";
-        } catch {
-          imageData = null;
-        }
-      }
-
-      if (!imageData?.data) {
-        // Last resort: check if the clipboard even reports an image
-        const hasImage = await Clipboard.hasImageAsync().catch(() => false);
-        if (!hasImage) {
-          Alert.alert(
-            "No Image in Clipboard",
-            "Copy an image first (long-press a photo → Copy), then tap Paste here.\n\n" +
-              "Note: On Android, you must copy the image while this app is open."
-          );
-        } else {
-          Alert.alert(
-            "Could Not Read Image",
-            "The image was detected in the clipboard but could not be read. " +
-              "Try copying the image again while this app is in the foreground."
-          );
-        }
-        return;
-      }
-
-      const uri = `data:${mimeType};base64,${imageData.data}`;
-      setPhoto({ uri, source: "clipboard", hasMetadata: false });
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ["image/jpeg", "image/jpg", "image/png", "image/heic", "image/webp", "image/*"],
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      const asset = result.assets[0];
+      setPhoto({
+        uri: asset.uri,
+        source: "files",
+        hasMetadata: false,
+      });
     } catch (err) {
-      console.warn("[Clipboard]", err);
-      Alert.alert(
-        "Clipboard Error",
-        "Failed to read image from clipboard. Make sure you copied an image (not a file or URL) and try again."
-      );
+      console.warn("[Files]", err);
+      Alert.alert("Error", "Could not open the image. Try again.");
     } finally {
-      setLoadingClipboard(false);
+      setLoadingFiles(false);
     }
   };
 
-  const handleVoiceToggle = async () => {
-    if (isListening) {
-      stopListeningRef.current = true;
-      setIsListening(false);
-      return;
+  const handleVoiceOpen = () => {
+    setVoiceDraft("");
+    setVoiceModalVisible(true);
+    setTimeout(() => voiceInputRef.current?.focus(), 150);
+  };
+
+  const handleVoiceConfirm = () => {
+    const trimmed = voiceDraft.trim();
+    if (trimmed) {
+      setNote((prev) => (prev ? `${prev} ${trimmed}` : trimmed));
     }
+    setVoiceModalVisible(false);
+    setVoiceDraft("");
+  };
 
-    if (Platform.OS === "web") {
-      Alert.alert(
-        "Voice not available",
-        "Voice recognition is not available on web. Please type your note.",
-      );
-      return;
-    }
-
-    setIsListening(true);
-    stopListeningRef.current = false;
-    if (Platform.OS !== "web") await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-    try {
-      const available = await ExpoSpeech.isSpeakingAsync();
-      void available;
-
-      const langLabel = getVoicePromptLabel(settings.voiceLanguage);
-
-      Alert.prompt(
-        langLabel,
-        `Language: ${currentLang.flag} ${currentLang.label}\n\nType or dictate your note:`,
-        [
-          {
-            text: "Cancel",
-            style: "cancel",
-            onPress: () => setIsListening(false),
-          },
-          {
-            text: "Add",
-            onPress: (text) => {
-              if (text?.trim()) {
-                setNote((prev) => (prev ? prev + " " + text.trim() : text.trim()));
-              }
-              setIsListening(false);
-            },
-          },
-        ],
-        "plain-text",
-        note,
-      );
-    } catch {
-      setIsListening(false);
-    }
-
-    setIsListening(false);
+  const handleVoiceCancel = () => {
+    setVoiceModalVisible(false);
+    setVoiceDraft("");
   };
 
   const handleSave = async () => {
@@ -230,7 +174,7 @@ export default function NewRecordScreen() {
       return;
     }
     if (!note.trim()) {
-      Alert.alert("No Note", "Please add a note or voice comment.");
+      Alert.alert("No Note", "Please add a note before saving.");
       return;
     }
     setIsSaving(true);
@@ -252,14 +196,12 @@ export default function NewRecordScreen() {
 
     if (settings.configured && user) {
       const result = await saveToObsidian(record, user.username);
-      if (!result.ok) {
-        if (result.reason === "open_failed") {
-          Alert.alert(
-            "Cannot Open Obsidian",
-            "Record saved locally. To send to Obsidian, open the record and tap \"Save to Obsidian\".\n\n" +
-              "Make sure Obsidian is installed with the Actions URI plugin enabled."
-          );
-        }
+      if (!result.ok && result.reason === "open_failed") {
+        Alert.alert(
+          "Cannot Open Obsidian",
+          "Record saved locally. To send to Obsidian later, open the record and tap \"Save to Obsidian\".\n\n" +
+            "Make sure Obsidian is installed with the Actions URI plugin enabled."
+        );
       }
     }
 
@@ -425,11 +367,12 @@ export default function NewRecordScreen() {
       paddingVertical: 6,
       paddingHorizontal: 10,
       borderRadius: 16,
+      backgroundColor: colors.primary + "18",
     },
-    voiceBtnActive: { backgroundColor: colors.destructive + "20" },
     voiceBtnText: {
       fontSize: 13,
       fontFamily: "Inter_500Medium",
+      color: colors.primary,
     },
     obsidianHint: {
       flexDirection: "row",
@@ -443,10 +386,126 @@ export default function NewRecordScreen() {
       fontFamily: "Inter_400Regular",
       color: settings.configured ? colors.success : colors.mutedForeground,
     },
+    // Voice modal
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.5)",
+      justifyContent: "flex-end",
+    },
+    modalSheet: {
+      backgroundColor: colors.background,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      paddingHorizontal: 20,
+      paddingTop: 20,
+      paddingBottom: Platform.OS === "web" ? 32 : insets.bottom + 24,
+    },
+    modalHandle: {
+      width: 36,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: colors.border,
+      alignSelf: "center",
+      marginBottom: 16,
+    },
+    modalTitle: {
+      fontSize: 16,
+      fontFamily: "Inter_600SemiBold",
+      color: colors.foreground,
+      marginBottom: 4,
+    },
+    modalHint: {
+      fontSize: 13,
+      fontFamily: "Inter_400Regular",
+      color: colors.mutedForeground,
+      marginBottom: 14,
+      lineHeight: 18,
+    },
+    modalInput: {
+      backgroundColor: colors.card,
+      borderRadius: colors.radius,
+      borderWidth: 1,
+      borderColor: colors.primary,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      fontSize: 15,
+      fontFamily: "Inter_400Regular",
+      color: colors.foreground,
+      minHeight: 100,
+      textAlignVertical: "top",
+      marginBottom: 14,
+    },
+    modalBtnRow: {
+      flexDirection: "row",
+      gap: 10,
+    },
+    modalCancelBtn: {
+      flex: 1,
+      paddingVertical: 13,
+      alignItems: "center",
+      borderRadius: colors.radius,
+      backgroundColor: colors.surface,
+    },
+    modalCancelText: {
+      fontSize: 15,
+      fontFamily: "Inter_500Medium",
+      color: colors.mutedForeground,
+    },
+    modalConfirmBtn: {
+      flex: 2,
+      paddingVertical: 13,
+      alignItems: "center",
+      borderRadius: colors.radius,
+      backgroundColor: colors.primary,
+    },
+    modalConfirmText: {
+      fontSize: 15,
+      fontFamily: "Inter_600SemiBold",
+      color: colors.primaryForeground,
+    },
   });
 
   return (
     <View style={s.container}>
+      {/* Voice dictation modal */}
+      <Modal
+        visible={voiceModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={handleVoiceCancel}
+      >
+        <Pressable style={s.modalOverlay} onPress={handleVoiceCancel}>
+          <Pressable style={s.modalSheet} onPress={Keyboard.dismiss}>
+            <View style={s.modalHandle} />
+            <Text style={s.modalTitle}>
+              {currentLang.flag} {getDictateLabel(settings.voiceLanguage)}
+            </Text>
+            <Text style={s.modalHint}>
+              {getDictateHint(settings.voiceLanguage)}
+            </Text>
+            <TextInput
+              ref={voiceInputRef}
+              style={s.modalInput}
+              value={voiceDraft}
+              onChangeText={setVoiceDraft}
+              placeholder={getVoicePlaceholder(settings.voiceLanguage)}
+              placeholderTextColor={colors.mutedForeground}
+              multiline
+              autoFocus
+              maxLength={2000}
+            />
+            <View style={s.modalBtnRow}>
+              <Pressable style={s.modalCancelBtn} onPress={handleVoiceCancel}>
+                <Text style={s.modalCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable style={s.modalConfirmBtn} onPress={handleVoiceConfirm}>
+                <Text style={s.modalConfirmText}>Add to note</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <View style={s.header}>
         <Pressable style={s.backBtn} onPress={() => router.back()}>
           <Feather name="arrow-left" size={22} color={colors.foreground} />
@@ -480,13 +539,13 @@ export default function NewRecordScreen() {
                 <Feather name="image" size={18} color={colors.primary} />
                 <Text style={s.pickBtnText}>Gallery</Text>
               </Pressable>
-              <Pressable style={s.pickBtn} onPress={handleClipboardPaste} disabled={loadingClipboard}>
-                {loadingClipboard ? (
+              <Pressable style={s.pickBtn} onPress={handleFilesPick} disabled={loadingFiles}>
+                {loadingFiles ? (
                   <ActivityIndicator size="small" color={colors.primary} />
                 ) : (
                   <>
-                    <Feather name="clipboard" size={18} color={colors.primary} />
-                    <Text style={s.pickBtnText}>Paste</Text>
+                    <Feather name="folder" size={18} color={colors.primary} />
+                    <Text style={s.pickBtnText}>Files</Text>
                   </>
                 )}
               </Pressable>
@@ -538,7 +597,7 @@ export default function NewRecordScreen() {
                 <View style={s.warningBox}>
                   <Ionicons name="information-circle-outline" size={16} color={colors.accent} />
                   <Text style={s.warningText}>
-                    This photo has no date metadata. Please enter the date manually (YYYY-MM-DD).
+                    No date metadata found. Enter the date manually (YYYY-MM-DD).
                   </Text>
                 </View>
                 <TextInput
@@ -569,30 +628,13 @@ export default function NewRecordScreen() {
                 maxLength={2000}
               />
               <View style={s.noteToolbar}>
-                {/* Current language indicator */}
                 <View style={s.langPill}>
                   <Text style={{ fontSize: 14 }}>{currentLang.flag}</Text>
                   <Text style={s.langPillText}>{currentLang.label}</Text>
                 </View>
-
-                {/* Voice button */}
-                <Pressable
-                  style={[s.voiceBtn, isListening && s.voiceBtnActive]}
-                  onPress={handleVoiceToggle}
-                >
-                  <Feather
-                    name={isListening ? "mic-off" : "mic"}
-                    size={15}
-                    color={isListening ? colors.destructive : colors.mutedForeground}
-                  />
-                  <Text
-                    style={[
-                      s.voiceBtnText,
-                      { color: isListening ? colors.destructive : colors.mutedForeground },
-                    ]}
-                  >
-                    {isListening ? "Stop" : "Voice"}
-                  </Text>
+                <Pressable style={s.voiceBtn} onPress={handleVoiceOpen}>
+                  <Feather name="mic" size={15} color={colors.primary} />
+                  <Text style={s.voiceBtnText}>Dictate</Text>
                 </Pressable>
               </View>
             </View>
@@ -609,7 +651,7 @@ export default function NewRecordScreen() {
             />
             <Text style={s.obsidianHintText}>
               {settings.configured
-                ? `Will save to Obsidian vault: ${settings.vaultName}`
+                ? `Will save text note to Obsidian vault: ${settings.vaultName}`
                 : "Obsidian not configured — go to Settings to enable"}
             </Text>
           </View>

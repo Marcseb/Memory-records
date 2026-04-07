@@ -16,6 +16,8 @@ function formatMarkdown(record: MemoryRecord, username: string): string {
   }
   if (record.lat && record.lng) {
     lines.push(`**Coordinates:** ${record.lat.toFixed(5)}, ${record.lng.toFixed(5)}`);
+    const mapsUrl = `https://maps.google.com/?q=${record.lat.toFixed(5)},${record.lng.toFixed(5)}`;
+    lines.push(`**Map:** [Open in Google Maps](${mapsUrl})`);
   }
   lines.push(`**Recorded by:** ${username}`);
   lines.push(`**Saved at:** ${new Date(record.createdAt).toISOString()}`);
@@ -27,6 +29,10 @@ function formatMarkdown(record: MemoryRecord, username: string): string {
   lines.push(record.note || "_No note added._");
   lines.push("");
   lines.push("---");
+  lines.push("");
+  lines.push("> 📷 **Photo:** stored locally in the Memory Records app on this device.");
+  lines.push("> To attach the photo to this note, open it in the app and share/export the image into this vault's attachments folder.");
+  lines.push("");
   lines.push(`*Created with Memory Records app*`);
   return lines.join("\n");
 }
