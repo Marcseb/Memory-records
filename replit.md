@@ -2,7 +2,7 @@
 
 ## Overview
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+pnpm workspace monorepo using TypeScript. Contains an Express API server and an Expo mobile app ("Memory Records").
 
 ## Stack
 
@@ -15,6 +15,46 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 - **Validation**: Zod (`zod/v4`), `drizzle-zod`
 - **API codegen**: Orval (from OpenAPI spec)
 - **Build**: esbuild (CJS bundle)
+
+## Artifacts
+
+### Memory Records (Mobile App)
+- **Path**: `artifacts/memory-records/`
+- **Type**: Expo (React Native)
+- **Preview**: `/memory-records/`
+- **Purpose**: A personal memory journaling app — users select photos from their gallery or paste from clipboard, add text or voice notes, and save the records to an Obsidian vault via the Actions URI plugin.
+
+**Key features:**
+- Custom username/password authentication (stored locally with AsyncStorage + SecureStore)
+- Photo selection from gallery (with EXIF/GPS metadata extraction)
+- Clipboard paste for images (when no metadata, user is prompted to enter date)
+- Text annotation + voice-to-text (on-device, native)
+- Obsidian Actions URI integration (saves notes to obsidian vault via deep link)
+- AsyncStorage persistence for all records and settings
+- Dark/light mode support
+
+**Screens:**
+- `(auth)/login.tsx` — Sign-in screen
+- `(auth)/register.tsx` — Registration screen
+- `(tabs)/index.tsx` — Main memory list
+- `(tabs)/settings.tsx` — Obsidian vault settings + account
+- `new-record.tsx` — New memory creation (photo + note)
+- `record/[id].tsx` — Memory detail view + Obsidian save button
+
+**Context providers:**
+- `context/AuthContext.tsx` — User session management
+- `context/SettingsContext.tsx` — Obsidian vault name/folder
+- `context/RecordsContext.tsx` — Memory records CRUD
+
+**Obsidian integration:**
+- Uses `obsidian://actions-uri/note/create` deep link
+- Requires Actions URI plugin installed in Obsidian on the same device
+- Vault name + folder configurable in Settings tab
+
+### API Server
+- **Path**: `artifacts/api-server/`
+- **Type**: Express 5 + TypeScript
+- **Preview**: `/api`
 
 ## Key Commands
 
