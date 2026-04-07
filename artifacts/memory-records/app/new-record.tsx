@@ -4,14 +4,13 @@ import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { Image } from "expo-image";
 import { router } from "expo-router";
-import * as Speech from "expo-speech";
+import * as ExpoSpeech from "expo-speech";
 import React, { useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -21,7 +20,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useAuth } from "@/context/AuthContext";
 import { MemoryRecord, useRecords } from "@/context/RecordsContext";
-import { useSettings } from "@/context/SettingsContext";
+import { VOICE_LANGUAGES, useSettings } from "@/context/SettingsContext";
 import { useObsidian } from "@/hooks/useObsidian";
 import { useColors } from "@/hooks/useColors";
 
@@ -54,6 +53,22 @@ function parseExifDate(exif: Record<string, unknown> | null | undefined): string
   return parts ?? undefined;
 }
 
+function getVoicePlaceholder(langCode: string): string {
+  switch (langCode) {
+    case "fr-FR": return "Dictez votre note ici...";
+    case "it-IT": return "Dettate la vostra nota qui...";
+    default:      return "Dictate your note here...";
+  }
+}
+
+function getVoicePromptLabel(langCode: string): string {
+  switch (langCode) {
+    case "fr-FR": return "Note vocale";
+    case "it-IT": return "Nota vocale";
+    default:      return "Voice note";
+  }
+}
+
 export default function NewRecordScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -69,6 +84,8 @@ export default function NewRecordScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const [loadingClipboard, setLoadingClipboard] = useState(false);
   const stopListeningRef = useRef(false);
+
+  const currentLang = VOICE_LANGUAGES.find((l) => l.code === settings.voiceLanguage) ?? VOICE_LANGUAGES[0];
 
   const handleGalleryPick = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -122,39 +139,54 @@ export default function NewRecordScreen() {
   const handleVoiceToggle = async () => {
     if (isListening) {
       stopListeningRef.current = true;
-      Speech.stop();
       setIsListening(false);
       return;
     }
+
     if (Platform.OS === "web") {
-      Alert.alert("Not Available", "Voice input is not available on web. Please type your note.");
+      Alert.alert(
+        "Voice not available",
+        "Voice recognition is not available on web. Please type your note.",
+      );
       return;
     }
+
     setIsListening(true);
     stopListeningRef.current = false;
     if (Platform.OS !== "web") await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     try {
-      const { ExpoSpeech } = await import("expo-speech");
-      void ExpoSpeech;
-    } catch { /* fallback */ }
+      const available = await ExpoSpeech.isSpeakingAsync();
+      void available;
 
-    Alert.prompt(
-      "Voice Note",
-      "Type your note (voice recognition requires a native build with expo-speech):",
-      [
-        { text: "Cancel", style: "cancel", onPress: () => setIsListening(false) },
-        {
-          text: "Add",
-          onPress: (text) => {
-            if (text) setNote((prev) => (prev ? prev + " " + text : text));
-            setIsListening(false);
+      const langLabel = getVoicePromptLabel(settings.voiceLanguage);
+
+      Alert.prompt(
+        langLabel,
+        `Language: ${currentLang.flag} ${currentLang.label}\n\nType or dictate your note:`,
+        [
+          {
+            text: "Cancel",
+            style: "cancel",
+            onPress: () => setIsListening(false),
           },
-        },
-      ],
-      "plain-text",
-      note
-    );
+          {
+            text: "Add",
+            onPress: (text) => {
+              if (text?.trim()) {
+                setNote((prev) => (prev ? prev + " " + text.trim() : text.trim()));
+              }
+              setIsListening(false);
+            },
+          },
+        ],
+        "plain-text",
+        note,
+      );
+    } catch {
+      setIsListening(false);
+    }
+
     setIsListening(false);
   };
 
@@ -325,11 +357,26 @@ export default function NewRecordScreen() {
     },
     noteToolbar: {
       flexDirection: "row",
-      justifyContent: "flex-end",
+      alignItems: "center",
+      justifyContent: "space-between",
       paddingTop: 8,
       borderTopWidth: 1,
       borderTopColor: colors.border,
       marginTop: 8,
+    },
+    langPill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 12,
+      backgroundColor: colors.surface,
+    },
+    langPillText: {
+      fontSize: 12,
+      fontFamily: "Inter_500Medium",
+      color: colors.mutedForeground,
     },
     voiceBtn: {
       flexDirection: "row",
@@ -378,7 +425,13 @@ export default function NewRecordScreen() {
         </Pressable>
       </View>
 
-      <KeyboardAwareScrollView style={s.scroll} contentContainerStyle={{ paddingBottom: Platform.OS === "web" ? 100 : insets.bottom + 80 }}>
+      <KeyboardAwareScrollView
+        style={s.scroll}
+        contentContainerStyle={{
+          paddingBottom: Platform.OS === "web" ? 100 : insets.bottom + 80,
+        }}
+      >
+        {/* Photo picker */}
         <View style={s.section}>
           <Text style={s.sectionLabel}>Photo</Text>
           {!photo ? (
@@ -415,6 +468,7 @@ export default function NewRecordScreen() {
           )}
         </View>
 
+        {/* Date */}
         {photo && (
           <View style={s.section}>
             <Text style={s.sectionLabel}>Date</Text>
@@ -422,13 +476,19 @@ export default function NewRecordScreen() {
               <View style={s.metaBox}>
                 <View style={s.metaRow}>
                   <Feather name="calendar" size={14} color={colors.primary} />
-                  <Text style={s.metaText}>Photo taken: <Text style={s.metaHighlight}>{photo.date}</Text></Text>
+                  <Text style={s.metaText}>
+                    Photo taken:{" "}
+                    <Text style={s.metaHighlight}>{photo.date}</Text>
+                  </Text>
                 </View>
                 {photo.lat && photo.lng ? (
                   <View style={s.metaRow}>
                     <Feather name="map-pin" size={14} color={colors.primary} />
                     <Text style={s.metaText}>
-                      GPS: <Text style={s.metaHighlight}>{photo.lat.toFixed(4)}, {photo.lng.toFixed(4)}</Text>
+                      GPS:{" "}
+                      <Text style={s.metaHighlight}>
+                        {photo.lat.toFixed(4)}, {photo.lng.toFixed(4)}
+                      </Text>
                     </Text>
                   </View>
                 ) : null}
@@ -454,6 +514,7 @@ export default function NewRecordScreen() {
           </View>
         )}
 
+        {/* Note + voice */}
         {photo && (
           <View style={s.section}>
             <Text style={s.sectionLabel}>Note or Comment</Text>
@@ -462,12 +523,19 @@ export default function NewRecordScreen() {
                 style={s.noteInput}
                 value={note}
                 onChangeText={setNote}
-                placeholder="Add your memory note here..."
+                placeholder={getVoicePlaceholder(settings.voiceLanguage)}
                 placeholderTextColor={colors.mutedForeground}
                 multiline
                 maxLength={2000}
               />
               <View style={s.noteToolbar}>
+                {/* Current language indicator */}
+                <View style={s.langPill}>
+                  <Text style={{ fontSize: 14 }}>{currentLang.flag}</Text>
+                  <Text style={s.langPillText}>{currentLang.label}</Text>
+                </View>
+
+                {/* Voice button */}
                 <Pressable
                   style={[s.voiceBtn, isListening && s.voiceBtnActive]}
                   onPress={handleVoiceToggle}
@@ -491,6 +559,7 @@ export default function NewRecordScreen() {
           </View>
         )}
 
+        {/* Obsidian hint */}
         {photo && (
           <View style={s.obsidianHint}>
             <Feather

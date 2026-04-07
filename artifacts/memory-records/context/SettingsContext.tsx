@@ -1,29 +1,39 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useState } from "react";
 
-interface ObsidianSettings {
+export type VoiceLanguage = "fr-FR" | "it-IT" | "en-US";
+
+export const VOICE_LANGUAGES: { code: VoiceLanguage; label: string; flag: string }[] = [
+  { code: "fr-FR", label: "Français", flag: "🇫🇷" },
+  { code: "it-IT", label: "Italiano", flag: "🇮🇹" },
+  { code: "en-US", label: "English", flag: "🇺🇸" },
+];
+
+interface AppSettings {
   vaultName: string;
   folder: string;
   configured: boolean;
+  voiceLanguage: VoiceLanguage;
 }
 
 interface SettingsContextType {
-  settings: ObsidianSettings;
-  updateSettings: (updates: Partial<ObsidianSettings>) => Promise<void>;
+  settings: AppSettings;
+  updateSettings: (updates: Partial<AppSettings>) => Promise<void>;
 }
 
 const SettingsContext = createContext<SettingsContextType | null>(null);
 
 const SETTINGS_KEY = "mr_obsidian_settings";
 
-const DEFAULT_SETTINGS: ObsidianSettings = {
+const DEFAULT_SETTINGS: AppSettings = {
   vaultName: "",
   folder: "Memory Records",
   configured: false,
+  voiceLanguage: "fr-FR",
 };
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
-  const [settings, setSettings] = useState<ObsidianSettings>(DEFAULT_SETTINGS);
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
 
   useEffect(() => {
     (async () => {
@@ -38,7 +48,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     })();
   }, []);
 
-  const updateSettings = async (updates: Partial<ObsidianSettings>) => {
+  const updateSettings = async (updates: Partial<AppSettings>) => {
     const next = { ...settings, ...updates };
     next.configured = !!next.vaultName.trim();
     setSettings(next);
