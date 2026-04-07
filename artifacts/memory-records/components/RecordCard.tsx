@@ -60,6 +60,13 @@ export function RecordCard({ record, onPress, onDelete }: Props) {
       width: 88,
       height: 88,
     },
+    noPhotoThumb: {
+      width: 88,
+      height: 88,
+      backgroundColor: colors.surface,
+      alignItems: "center",
+      justifyContent: "center",
+    },
     content: {
       flex: 1,
       padding: 12,
@@ -124,7 +131,13 @@ export function RecordCard({ record, onPress, onDelete }: Props) {
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
     >
-      <Image source={{ uri: record.imageUri }} style={s.thumbnail} contentFit="cover" />
+      {record.imageUri ? (
+        <Image source={{ uri: record.imageUri }} style={s.thumbnail} contentFit="cover" />
+      ) : (
+        <View style={s.noPhotoThumb}>
+          <Feather name="file-text" size={26} color={colors.mutedForeground} />
+        </View>
+      )}
       <View style={s.content}>
         <Text style={s.date}>{record.date}</Text>
         <Text style={s.note} numberOfLines={2}>{notePreview}</Text>

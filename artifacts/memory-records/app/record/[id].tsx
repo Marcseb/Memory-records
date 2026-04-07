@@ -181,7 +181,9 @@ export default function RecordDetailScreen() {
       </View>
 
       <ScrollView style={s.scroll} contentContainerStyle={{ paddingBottom: Platform.OS === "web" ? 80 : insets.bottom + 40 }}>
-        <Image source={{ uri: record.imageUri }} style={s.photo} contentFit="cover" />
+        {record.imageUri ? (
+          <Image source={{ uri: record.imageUri }} style={s.photo} contentFit="cover" />
+        ) : null}
 
         <View style={s.content}>
           {record.savedToObsidian && (

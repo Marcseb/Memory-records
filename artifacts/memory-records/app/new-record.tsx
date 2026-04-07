@@ -1,5 +1,4 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
-import * as DocumentPicker from "expo-document-picker";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { Image } from "expo-image";
@@ -25,16 +24,12 @@ import { VOICE_LANGUAGES, useSettings } from "@/context/SettingsContext";
 import { useObsidian } from "@/hooks/useObsidian";
 import { useColors } from "@/hooks/useColors";
 
-type PhotoSource = "gallery" | "files" | null;
-
 interface PhotoData {
   uri: string;
-  source: PhotoSource;
   date?: string;
   hasMetadata: boolean;
   lat?: number;
   lng?: number;
-  location?: string;
 }
 
 function generateId() {
@@ -54,7 +49,7 @@ function parseExifDate(exif: Record<string, unknown> | null | undefined): string
   return parts ?? undefined;
 }
 
-function getVoicePlaceholder(langCode: string): string {
+function getNotePlaceholder(langCode: string): string {
   switch (langCode) {
     case "fr-FR": return "Tapez ou dictez votre note ici...";
     case "it-IT": return "Digitate o dettate la vostra nota qui...";
@@ -72,9 +67,9 @@ function getDictateLabel(langCode: string): string {
 
 function getDictateHint(langCode: string): string {
   switch (langCode) {
-    case "fr-FR": return "Tapez votre note, ou appuyez sur 🎤 sur le clavier pour dicter.";
-    case "it-IT": return "Digitate la nota, o premete 🎤 sulla tastiera per dettare.";
-    default:      return "Type your note, or tap 🎤 on your keyboard to dictate.";
+    case "fr-FR": return "Tapez votre note ou appuyez sur 🎤 sur le clavier pour dicter.";
+    case "it-IT": return "Digitate la nota o premete 🎤 sulla tastiera per dettare.";
+    default:      return "Type your note or tap 🎤 on your keyboard to dictate.";
   }
 }
 
@@ -86,13 +81,14 @@ export default function NewRecordScreen() {
   const { settings } = useSettings();
   const { saveToObsidian } = useObsidian();
 
+  // "photo" mode = gallery photo; "note" mode = text-only
+  const [mode, setMode] = useState<"photo" | "note" | null>(null);
   const [photo, setPhoto] = useState<PhotoData | null>(null);
   const [note, setNote] = useState("");
   const [manualDate, setManualDate] = useState(todayString());
   const [isSaving, setIsSaving] = useState(false);
-  const [loadingFiles, setLoadingFiles] = useState(false);
 
-  // Voice modal state
+  // Voice dictation modal
   const [voiceModalVisible, setVoiceModalVisible] = useState(false);
   const [voiceDraft, setVoiceDraft] = useState("");
   const voiceInputRef = useRef<TextInput>(null);
@@ -115,37 +111,15 @@ export default function NewRecordScreen() {
     const exifDate = parseExifDate(asset.exif as Record<string, unknown> | null);
     const lat = typeof asset.exif?.["GPSLatitude"] === "number" ? (asset.exif["GPSLatitude"] as number) : undefined;
     const lng = typeof asset.exif?.["GPSLongitude"] === "number" ? (asset.exif["GPSLongitude"] as number) : undefined;
-    setPhoto({
-      uri: asset.uri,
-      source: "gallery",
-      date: exifDate,
-      hasMetadata: !!exifDate,
-      lat,
-      lng,
-    });
+    setPhoto({ uri: asset.uri, date: exifDate, hasMetadata: !!exifDate, lat, lng });
     if (exifDate) setManualDate(exifDate);
+    setMode("photo");
   };
 
-  const handleFilesPick = async () => {
-    setLoadingFiles(true);
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ["image/jpeg", "image/jpg", "image/png", "image/heic", "image/webp", "image/*"],
-        copyToCacheDirectory: true,
-      });
-      if (result.canceled || !result.assets?.[0]) return;
-      const asset = result.assets[0];
-      setPhoto({
-        uri: asset.uri,
-        source: "files",
-        hasMetadata: false,
-      });
-    } catch (err) {
-      console.warn("[Files]", err);
-      Alert.alert("Error", "Could not open the image. Try again.");
-    } finally {
-      setLoadingFiles(false);
-    }
+  const handleNoteMode = () => {
+    setPhoto(null);
+    setManualDate(todayString());
+    setMode("note");
   };
 
   const handleVoiceOpen = () => {
@@ -168,13 +142,16 @@ export default function NewRecordScreen() {
     setVoiceDraft("");
   };
 
+  const handleReset = () => {
+    setMode(null);
+    setPhoto(null);
+    setNote("");
+    setManualDate(todayString());
+  };
+
   const handleSave = async () => {
-    if (!photo) {
-      Alert.alert("No Photo", "Please select a photo first.");
-      return;
-    }
     if (!note.trim()) {
-      Alert.alert("No Note", "Please add a note before saving.");
+      Alert.alert("No Note", "Please write or dictate a note before saving.");
       return;
     }
     setIsSaving(true);
@@ -182,12 +159,12 @@ export default function NewRecordScreen() {
 
     const record: MemoryRecord = {
       id: generateId(),
-      imageUri: photo.uri,
+      imageUri: photo?.uri,
       note: note.trim(),
-      date: photo.date ?? manualDate,
-      location: photo.location,
-      lat: photo.lat,
-      lng: photo.lng,
+      date: photo?.date ?? manualDate,
+      location: undefined,
+      lat: photo?.lat,
+      lng: photo?.lng,
       savedToObsidian: false,
       createdAt: Date.now(),
     };
@@ -199,7 +176,7 @@ export default function NewRecordScreen() {
       if (!result.ok && result.reason === "open_failed") {
         Alert.alert(
           "Cannot Open Obsidian",
-          "Record saved locally. To send to Obsidian later, open the record and tap \"Save to Obsidian\".\n\n" +
+          "Record saved locally. Open the record and tap \"Save to Obsidian\" when ready.\n\n" +
             "Make sure Obsidian is installed with the Actions URI plugin enabled."
         );
       }
@@ -209,7 +186,8 @@ export default function NewRecordScreen() {
     router.back();
   };
 
-  const hasDate = photo?.hasMetadata && !!photo.date;
+  const hasExifDate = photo?.hasMetadata && !!photo.date;
+  const showContent = mode !== null;
 
   const s = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
@@ -244,6 +222,44 @@ export default function NewRecordScreen() {
       color: colors.primaryForeground,
     },
     scroll: { flex: 1 },
+    // Mode picker (initial state)
+    modePickerContainer: {
+      flex: 1,
+      justifyContent: "center",
+      paddingHorizontal: 24,
+      gap: 14,
+    },
+    modePickerLabel: {
+      fontSize: 14,
+      fontFamily: "Inter_500Medium",
+      color: colors.mutedForeground,
+      textAlign: "center",
+      marginBottom: 8,
+    },
+    modePicker: { flexDirection: "row", gap: 14 },
+    modeBtn: {
+      flex: 1,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 10,
+      paddingVertical: 28,
+      backgroundColor: colors.card,
+      borderRadius: colors.radius,
+      borderWidth: 1.5,
+      borderColor: colors.border,
+    },
+    modeBtnText: {
+      fontSize: 14,
+      fontFamily: "Inter_600SemiBold",
+      color: colors.foreground,
+    },
+    modeBtnSub: {
+      fontSize: 12,
+      fontFamily: "Inter_400Regular",
+      color: colors.mutedForeground,
+      textAlign: "center",
+    },
+    // Content sections
     section: { padding: 16, gap: 10 },
     sectionLabel: {
       fontSize: 12,
@@ -252,9 +268,13 @@ export default function NewRecordScreen() {
       textTransform: "uppercase",
       letterSpacing: 0.8,
     },
-    photoPickerRow: { flexDirection: "row", gap: 10 },
-    pickBtn: {
-      flex: 1,
+    photoPreview: {
+      width: "100%",
+      height: 220,
+      borderRadius: colors.radius,
+      backgroundColor: colors.muted,
+    },
+    changePhotoBtn: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
@@ -263,18 +283,12 @@ export default function NewRecordScreen() {
       borderRadius: colors.radius,
       borderWidth: 1,
       borderColor: colors.border,
-      paddingVertical: 14,
+      paddingVertical: 12,
     },
-    pickBtnText: {
+    changeBtnText: {
       fontSize: 14,
       fontFamily: "Inter_500Medium",
-      color: colors.foreground,
-    },
-    photoPreview: {
-      width: "100%",
-      height: 220,
-      borderRadius: colors.radius,
-      backgroundColor: colors.muted,
+      color: colors.mutedForeground,
     },
     metaBox: {
       backgroundColor: colors.surface,
@@ -282,11 +296,7 @@ export default function NewRecordScreen() {
       padding: 12,
       gap: 4,
     },
-    metaRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 6,
-    },
+    metaRow: { flexDirection: "row", alignItems: "center", gap: 6 },
     metaText: {
       fontSize: 13,
       fontFamily: "Inter_400Regular",
@@ -334,38 +344,24 @@ export default function NewRecordScreen() {
       fontSize: 15,
       fontFamily: "Inter_400Regular",
       color: colors.foreground,
-      minHeight: 100,
+      minHeight: 120,
       textAlignVertical: "top",
     },
     noteToolbar: {
       flexDirection: "row",
       alignItems: "center",
-      justifyContent: "space-between",
+      justifyContent: "flex-end",
       paddingTop: 8,
       borderTopWidth: 1,
       borderTopColor: colors.border,
       marginTop: 8,
-    },
-    langPill: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 4,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: 12,
-      backgroundColor: colors.surface,
-    },
-    langPillText: {
-      fontSize: 12,
-      fontFamily: "Inter_500Medium",
-      color: colors.mutedForeground,
     },
     voiceBtn: {
       flexDirection: "row",
       alignItems: "center",
       gap: 6,
       paddingVertical: 6,
-      paddingHorizontal: 10,
+      paddingHorizontal: 12,
       borderRadius: 16,
       backgroundColor: colors.primary + "18",
     },
@@ -435,10 +431,7 @@ export default function NewRecordScreen() {
       textAlignVertical: "top",
       marginBottom: 14,
     },
-    modalBtnRow: {
-      flexDirection: "row",
-      gap: 10,
-    },
+    modalBtnRow: { flexDirection: "row", gap: 10 },
     modalCancelBtn: {
       flex: 1,
       paddingVertical: 13,
@@ -477,18 +470,14 @@ export default function NewRecordScreen() {
         <Pressable style={s.modalOverlay} onPress={handleVoiceCancel}>
           <Pressable style={s.modalSheet} onPress={Keyboard.dismiss}>
             <View style={s.modalHandle} />
-            <Text style={s.modalTitle}>
-              {currentLang.flag} {getDictateLabel(settings.voiceLanguage)}
-            </Text>
-            <Text style={s.modalHint}>
-              {getDictateHint(settings.voiceLanguage)}
-            </Text>
+            <Text style={s.modalTitle}>{getDictateLabel(settings.voiceLanguage)}</Text>
+            <Text style={s.modalHint}>{getDictateHint(settings.voiceLanguage)}</Text>
             <TextInput
               ref={voiceInputRef}
               style={s.modalInput}
               value={voiceDraft}
               onChangeText={setVoiceDraft}
-              placeholder={getVoicePlaceholder(settings.voiceLanguage)}
+              placeholder={getNotePlaceholder(settings.voiceLanguage)}
               placeholderTextColor={colors.mutedForeground}
               multiline
               autoFocus
@@ -506,100 +495,95 @@ export default function NewRecordScreen() {
         </Pressable>
       </Modal>
 
+      {/* Header */}
       <View style={s.header}>
-        <Pressable style={s.backBtn} onPress={() => router.back()}>
+        <Pressable style={s.backBtn} onPress={mode !== null ? handleReset : () => router.back()}>
           <Feather name="arrow-left" size={22} color={colors.foreground} />
         </Pressable>
         <Text style={s.headerTitle}>New Memory</Text>
-        <Pressable
-          style={[s.saveBtn, isSaving && s.saveBtnDisabled]}
-          onPress={handleSave}
-          disabled={isSaving}
-        >
-          {isSaving ? (
-            <ActivityIndicator size="small" color={colors.primaryForeground} />
-          ) : (
-            <Text style={s.saveBtnText}>Save</Text>
-          )}
-        </Pressable>
+        {showContent && (
+          <Pressable
+            style={[s.saveBtn, isSaving && s.saveBtnDisabled]}
+            onPress={handleSave}
+            disabled={isSaving}
+          >
+            {isSaving ? (
+              <ActivityIndicator size="small" color={colors.primaryForeground} />
+            ) : (
+              <Text style={s.saveBtnText}>Save</Text>
+            )}
+          </Pressable>
+        )}
       </View>
 
-      <KeyboardAwareScrollView
-        style={s.scroll}
-        contentContainerStyle={{
-          paddingBottom: Platform.OS === "web" ? 100 : insets.bottom + 80,
-        }}
-      >
-        {/* Photo picker */}
-        <View style={s.section}>
-          <Text style={s.sectionLabel}>Photo</Text>
-          {!photo ? (
-            <View style={s.photoPickerRow}>
-              <Pressable style={s.pickBtn} onPress={handleGalleryPick}>
-                <Feather name="image" size={18} color={colors.primary} />
-                <Text style={s.pickBtnText}>Gallery</Text>
-              </Pressable>
-              <Pressable style={s.pickBtn} onPress={handleFilesPick} disabled={loadingFiles}>
-                {loadingFiles ? (
-                  <ActivityIndicator size="small" color={colors.primary} />
-                ) : (
-                  <>
-                    <Feather name="folder" size={18} color={colors.primary} />
-                    <Text style={s.pickBtnText}>Files</Text>
-                  </>
-                )}
-              </Pressable>
-            </View>
-          ) : (
-            <View style={{ gap: 10 }}>
-              <Image source={{ uri: photo.uri }} style={s.photoPreview} contentFit="cover" />
-              <Pressable
-                style={[s.pickBtn, { flex: 0 }]}
-                onPress={() => {
-                  setPhoto(null);
-                  setManualDate(todayString());
-                }}
-              >
-                <Feather name="refresh-cw" size={16} color={colors.mutedForeground} />
-                <Text style={[s.pickBtnText, { color: colors.mutedForeground }]}>Change photo</Text>
-              </Pressable>
+      {/* Mode picker — shown only before choosing */}
+      {!showContent ? (
+        <View style={s.modePickerContainer}>
+          <Text style={s.modePickerLabel}>What would you like to record?</Text>
+          <View style={s.modePicker}>
+            <Pressable style={s.modeBtn} onPress={handleGalleryPick}>
+              <Feather name="image" size={32} color={colors.primary} />
+              <Text style={s.modeBtnText}>Photo</Text>
+              <Text style={s.modeBtnSub}>Pick from gallery{"\n"}+ add a note</Text>
+            </Pressable>
+            <Pressable style={s.modeBtn} onPress={handleNoteMode}>
+              <Feather name="file-text" size={32} color={colors.primary} />
+              <Text style={s.modeBtnText}>Note</Text>
+              <Text style={s.modeBtnSub}>Text or voice{"\n"}without a photo</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : (
+        <KeyboardAwareScrollView
+          style={s.scroll}
+          contentContainerStyle={{
+            paddingBottom: Platform.OS === "web" ? 100 : insets.bottom + 80,
+          }}
+        >
+          {/* Photo section — only in photo mode */}
+          {mode === "photo" && (
+            <View style={s.section}>
+              <Text style={s.sectionLabel}>Photo</Text>
+              {photo ? (
+                <View style={{ gap: 10 }}>
+                  <Image source={{ uri: photo.uri }} style={s.photoPreview} contentFit="cover" />
+                  <Pressable style={s.changePhotoBtn} onPress={handleGalleryPick}>
+                    <Feather name="refresh-cw" size={16} color={colors.mutedForeground} />
+                    <Text style={s.changeBtnText}>Change photo</Text>
+                  </Pressable>
+                </View>
+              ) : null}
             </View>
           )}
-        </View>
 
-        {/* Date */}
-        {photo && (
+          {/* Date section */}
           <View style={s.section}>
             <Text style={s.sectionLabel}>Date</Text>
-            {hasDate ? (
+            {hasExifDate ? (
               <View style={s.metaBox}>
                 <View style={s.metaRow}>
                   <Feather name="calendar" size={14} color={colors.primary} />
                   <Text style={s.metaText}>
-                    Photo taken:{" "}
-                    <Text style={s.metaHighlight}>{photo.date}</Text>
+                    Photo taken: <Text style={s.metaHighlight}>{photo?.date}</Text>
                   </Text>
                 </View>
-                {photo.lat && photo.lng ? (
+                {photo?.lat && photo?.lng ? (
                   <View style={s.metaRow}>
                     <Feather name="map-pin" size={14} color={colors.primary} />
                     <Text style={s.metaText}>
-                      GPS:{" "}
-                      <Text style={s.metaHighlight}>
-                        {photo.lat.toFixed(4)}, {photo.lng.toFixed(4)}
-                      </Text>
+                      GPS: <Text style={s.metaHighlight}>{photo.lat.toFixed(4)}, {photo.lng.toFixed(4)}</Text>
                     </Text>
                   </View>
                 ) : null}
               </View>
             ) : (
               <View style={{ gap: 8 }}>
-                <View style={s.warningBox}>
-                  <Ionicons name="information-circle-outline" size={16} color={colors.accent} />
-                  <Text style={s.warningText}>
-                    No date metadata found. Enter the date manually (YYYY-MM-DD).
-                  </Text>
-                </View>
+                {mode === "photo" && (
+                  <View style={s.warningBox}>
+                    <Ionicons name="information-circle-outline" size={16} color={colors.accent} />
+                    <Text style={s.warningText}>No date metadata found in this photo. Enter the date manually.</Text>
+                  </View>
+                )}
                 <TextInput
                   style={s.dateInput}
                   value={manualDate}
@@ -611,38 +595,30 @@ export default function NewRecordScreen() {
               </View>
             )}
           </View>
-        )}
 
-        {/* Note + voice */}
-        {photo && (
+          {/* Note section */}
           <View style={s.section}>
-            <Text style={s.sectionLabel}>Note or Comment</Text>
+            <Text style={s.sectionLabel}>Note</Text>
             <View style={s.noteContainer}>
               <TextInput
                 style={s.noteInput}
                 value={note}
                 onChangeText={setNote}
-                placeholder={getVoicePlaceholder(settings.voiceLanguage)}
+                placeholder={getNotePlaceholder(settings.voiceLanguage)}
                 placeholderTextColor={colors.mutedForeground}
                 multiline
                 maxLength={2000}
               />
               <View style={s.noteToolbar}>
-                <View style={s.langPill}>
-                  <Text style={{ fontSize: 14 }}>{currentLang.flag}</Text>
-                  <Text style={s.langPillText}>{currentLang.label}</Text>
-                </View>
                 <Pressable style={s.voiceBtn} onPress={handleVoiceOpen}>
-                  <Feather name="mic" size={15} color={colors.primary} />
+                  <Feather name="mic" size={14} color={colors.primary} />
                   <Text style={s.voiceBtnText}>Dictate</Text>
                 </Pressable>
               </View>
             </View>
           </View>
-        )}
 
-        {/* Obsidian hint */}
-        {photo && (
+          {/* Obsidian hint */}
           <View style={s.obsidianHint}>
             <Feather
               name="circle"
@@ -651,12 +627,12 @@ export default function NewRecordScreen() {
             />
             <Text style={s.obsidianHintText}>
               {settings.configured
-                ? `Will save text note to Obsidian vault: ${settings.vaultName}`
+                ? `Will save to Obsidian vault: ${settings.vaultName}`
                 : "Obsidian not configured — go to Settings to enable"}
             </Text>
           </View>
-        )}
-      </KeyboardAwareScrollView>
+        </KeyboardAwareScrollView>
+      )}
     </View>
   );
 }
