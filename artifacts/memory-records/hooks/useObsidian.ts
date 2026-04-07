@@ -31,29 +31,44 @@ function formatMarkdown(record: MemoryRecord, username: string): string {
   return lines.join("\n");
 }
 
+export type ObsidianResult =
+  | { ok: true }
+  | { ok: false; reason: "not_configured" | "open_failed"; error?: unknown };
+
 export function useObsidian() {
   const { settings } = useSettings();
 
-  const saveToObsidian = async (record: MemoryRecord, username: string): Promise<boolean> => {
+  const saveToObsidian = async (
+    record: MemoryRecord,
+    username: string
+  ): Promise<ObsidianResult> => {
     if (!settings.vaultName.trim()) {
-      return false;
+      return { ok: false, reason: "not_configured" };
     }
+
+    const content = formatMarkdown(record, username);
+    const filename = sanitizeFilename(`${record.date}_${record.id.substring(0, 8)}`);
+    const filePath = settings.folder
+      ? `${settings.folder}/${filename}`
+      : filename;
+
+    // NOTE: We intentionally skip Linking.canOpenURL() here.
+    // On Android, custom URI schemes (obsidian://) require a <queries> manifest entry
+    // to return true from canOpenURL; without it the check always returns false even
+    // when Obsidian is installed.  We call openURL directly and catch any error.
+    const uri =
+      `obsidian://actions-uri/note/create` +
+      `?vault=${encodeURIComponent(settings.vaultName)}` +
+      `&file=${encodeURIComponent(filePath)}` +
+      `&content=${encodeURIComponent(content)}` +
+      `&overwrite=false`;
+
     try {
-      const content = formatMarkdown(record, username);
-      const filename = sanitizeFilename(`${record.date}_${record.id.substring(0, 8)}`);
-      const filePath = settings.folder
-        ? `${settings.folder}/${filename}`
-        : filename;
-
-      const uri = `obsidian://actions-uri/note/create?vault=${encodeURIComponent(settings.vaultName)}&file=${encodeURIComponent(filePath)}&content=${encodeURIComponent(content)}&overwrite=false`;
-
-      const canOpen = await Linking.canOpenURL(uri);
-      if (!canOpen) return false;
-
       await Linking.openURL(uri);
-      return true;
-    } catch {
-      return false;
+      return { ok: true };
+    } catch (err) {
+      console.warn("[Obsidian] openURL failed:", err);
+      return { ok: false, reason: "open_failed", error: err };
     }
   };
 

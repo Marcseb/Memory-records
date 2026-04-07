@@ -46,13 +46,24 @@ export default function RecordDetailScreen() {
     }
     setSaving(true);
     if (Platform.OS !== "web") await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const ok = await saveToObsidian(record, user?.username ?? "user");
-    if (ok) {
+    const result = await saveToObsidian(record, user?.username ?? "user");
+    if (result.ok) {
       await updateRecord(record.id, { savedToObsidian: true });
       if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert("Sent to Obsidian", "The memory record was sent to Obsidian. Switch back to this app after Obsidian processes it.");
+      Alert.alert(
+        "Sent to Obsidian ✓",
+        "Obsidian has been opened. Switch back to Obsidian to see the new note in your vault."
+      );
+    } else if (result.reason === "not_configured") {
+      Alert.alert("Not Configured", "Go to Settings and enter your Obsidian vault name first.");
     } else {
-      Alert.alert("Failed", "Could not open Obsidian. Make sure the Actions URI plugin is installed and Obsidian is installed on this device.");
+      Alert.alert(
+        "Cannot Open Obsidian",
+        "Could not open Obsidian. Make sure:\n\n" +
+          "1. Obsidian is installed on this device\n" +
+          "2. The Actions URI plugin is installed and enabled\n\n" +
+          "In Obsidian: Settings → Community Plugins → Browse → \"Actions URI\""
+      );
     }
     setSaving(false);
   };

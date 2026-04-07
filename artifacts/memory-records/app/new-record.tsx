@@ -117,20 +117,54 @@ export default function NewRecordScreen() {
   const handleClipboardPaste = async () => {
     setLoadingClipboard(true);
     try {
-      const hasImage = await Clipboard.hasImageAsync();
-      if (!hasImage) {
-        Alert.alert("No Image", "No image found in your clipboard. Copy an image first, then paste here.");
+      // On Android 10+, clipboard access is restricted to foreground apps;
+      // hasImageAsync may return false even when an image exists.
+      // We attempt getImageAsync directly with JPEG → PNG fallback.
+      let imageData: { data: string } | null = null;
+      let mimeType = "image/jpeg";
+
+      try {
+        imageData = await Clipboard.getImageAsync({ format: "jpeg" });
+      } catch {
+        imageData = null;
+      }
+
+      if (!imageData?.data) {
+        try {
+          imageData = await Clipboard.getImageAsync({ format: "png" });
+          mimeType = "image/png";
+        } catch {
+          imageData = null;
+        }
+      }
+
+      if (!imageData?.data) {
+        // Last resort: check if the clipboard even reports an image
+        const hasImage = await Clipboard.hasImageAsync().catch(() => false);
+        if (!hasImage) {
+          Alert.alert(
+            "No Image in Clipboard",
+            "Copy an image first (long-press a photo → Copy), then tap Paste here.\n\n" +
+              "Note: On Android, you must copy the image while this app is open."
+          );
+        } else {
+          Alert.alert(
+            "Could Not Read Image",
+            "The image was detected in the clipboard but could not be read. " +
+              "Try copying the image again while this app is in the foreground."
+          );
+        }
         return;
       }
-      const base64 = await Clipboard.getImageAsync({ format: "jpeg" });
-      if (!base64?.data) {
-        Alert.alert("Error", "Could not read image from clipboard.");
-        return;
-      }
-      const uri = `data:image/jpeg;base64,${base64.data}`;
+
+      const uri = `data:${mimeType};base64,${imageData.data}`;
       setPhoto({ uri, source: "clipboard", hasMetadata: false });
-    } catch {
-      Alert.alert("Error", "Failed to paste image from clipboard.");
+    } catch (err) {
+      console.warn("[Clipboard]", err);
+      Alert.alert(
+        "Clipboard Error",
+        "Failed to read image from clipboard. Make sure you copied an image (not a file or URL) and try again."
+      );
     } finally {
       setLoadingClipboard(false);
     }
@@ -217,9 +251,15 @@ export default function NewRecordScreen() {
     await addRecord(record);
 
     if (settings.configured && user) {
-      const saved = await saveToObsidian(record, user.username);
-      if (saved) {
-        await new Promise((res) => setTimeout(res, 500));
+      const result = await saveToObsidian(record, user.username);
+      if (!result.ok) {
+        if (result.reason === "open_failed") {
+          Alert.alert(
+            "Cannot Open Obsidian",
+            "Record saved locally. To send to Obsidian, open the record and tap \"Save to Obsidian\".\n\n" +
+              "Make sure Obsidian is installed with the Actions URI plugin enabled."
+          );
+        }
       }
     }
 
