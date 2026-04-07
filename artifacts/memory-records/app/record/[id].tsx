@@ -198,6 +198,13 @@ export default function RecordDetailScreen() {
               <Text style={s.metaLabel}>Date</Text>
               <Text style={s.metaValue}>{record.date}</Text>
             </View>
+            {record.tag && (
+              <View style={s.metaRow}>
+                <Feather name="tag" size={14} color={colors.primary} />
+                <Text style={s.metaLabel}>Tag</Text>
+                <Text style={s.metaValue}>#{record.tag}</Text>
+              </View>
+            )}
             {record.location && (
               <View style={s.metaRow}>
                 <Feather name="map-pin" size={14} color={colors.primary} />

@@ -4,6 +4,7 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 export interface MemoryRecord {
   id: string;
   imageUri?: string;
+  tag?: string;
   note: string;
   date: string;
   location?: string;
@@ -20,23 +21,29 @@ interface RecordsContextType {
   updateRecord: (id: string, updates: Partial<MemoryRecord>) => Promise<void>;
   deleteRecord: (id: string) => Promise<void>;
   isLoading: boolean;
+  knownTags: string[];
+  addTag: (tag: string) => Promise<void>;
 }
 
 const RecordsContext = createContext<RecordsContextType | null>(null);
 
 const RECORDS_KEY = "mr_records";
+const TAGS_KEY = "mr_tags";
 
 export function RecordsProvider({ children }: { children: React.ReactNode }) {
   const [records, setRecords] = useState<MemoryRecord[]>([]);
+  const [knownTags, setKnownTags] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
       try {
-        const raw = await AsyncStorage.getItem(RECORDS_KEY);
-        if (raw) {
-          setRecords(JSON.parse(raw));
-        }
+        const [rawRecords, rawTags] = await Promise.all([
+          AsyncStorage.getItem(RECORDS_KEY),
+          AsyncStorage.getItem(TAGS_KEY),
+        ]);
+        if (rawRecords) setRecords(JSON.parse(rawRecords));
+        if (rawTags) setKnownTags(JSON.parse(rawTags));
       } catch {
         // ignore
       } finally {
@@ -45,14 +52,14 @@ export function RecordsProvider({ children }: { children: React.ReactNode }) {
     })();
   }, []);
 
-  const save = async (updated: MemoryRecord[]) => {
+  const saveRecords = async (updated: MemoryRecord[]) => {
     await AsyncStorage.setItem(RECORDS_KEY, JSON.stringify(updated));
   };
 
   const addRecord = useCallback(async (record: MemoryRecord) => {
     setRecords((prev) => {
       const next = [record, ...prev];
-      save(next);
+      saveRecords(next);
       return next;
     });
   }, []);
@@ -60,7 +67,7 @@ export function RecordsProvider({ children }: { children: React.ReactNode }) {
   const updateRecord = useCallback(async (id: string, updates: Partial<MemoryRecord>) => {
     setRecords((prev) => {
       const next = prev.map((r) => (r.id === id ? { ...r, ...updates } : r));
-      save(next);
+      saveRecords(next);
       return next;
     });
   }, []);
@@ -68,13 +75,24 @@ export function RecordsProvider({ children }: { children: React.ReactNode }) {
   const deleteRecord = useCallback(async (id: string) => {
     setRecords((prev) => {
       const next = prev.filter((r) => r.id !== id);
-      save(next);
+      saveRecords(next);
+      return next;
+    });
+  }, []);
+
+  const addTag = useCallback(async (tag: string) => {
+    const normalized = tag.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9\-]/g, "");
+    if (!normalized) return;
+    setKnownTags((prev) => {
+      if (prev.includes(normalized)) return prev;
+      const next = [...prev, normalized].sort();
+      AsyncStorage.setItem(TAGS_KEY, JSON.stringify(next));
       return next;
     });
   }, []);
 
   return (
-    <RecordsContext.Provider value={{ records, addRecord, updateRecord, deleteRecord, isLoading }}>
+    <RecordsContext.Provider value={{ records, addRecord, updateRecord, deleteRecord, isLoading, knownTags, addTag }}>
       {children}
     </RecordsContext.Provider>
   );

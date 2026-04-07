@@ -142,6 +142,11 @@ export function RecordCard({ record, onPress, onDelete }: Props) {
         <Text style={s.date}>{record.date}</Text>
         <Text style={s.note} numberOfLines={2}>{notePreview}</Text>
         <View style={s.meta}>
+          {record.tag ? (
+            <View style={[s.badge, { backgroundColor: colors.primary + "18" }]}>
+              <Text style={[s.badgeText, { color: colors.primary }]}>#{record.tag}</Text>
+            </View>
+          ) : null}
           {record.location ? (
             <>
               <Feather name="map-pin" size={11} color={colors.mutedForeground} />

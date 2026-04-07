@@ -11,6 +11,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -20,7 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useAuth } from "@/context/AuthContext";
 import { MemoryRecord, useRecords } from "@/context/RecordsContext";
-import { VOICE_LANGUAGES, useSettings } from "@/context/SettingsContext";
+import { useSettings } from "@/context/SettingsContext";
 import { useObsidian } from "@/hooks/useObsidian";
 import { useColors } from "@/hooks/useColors";
 
@@ -73,27 +74,34 @@ function getDictateHint(langCode: string): string {
   }
 }
 
+function normalizeTag(raw: string): string {
+  return raw.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9\-]/g, "");
+}
+
 export default function NewRecordScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { addRecord } = useRecords();
+  const { addRecord, knownTags, addTag } = useRecords();
   const { settings } = useSettings();
   const { saveToObsidian } = useObsidian();
 
-  // "photo" mode = gallery photo; "note" mode = text-only
   const [mode, setMode] = useState<"photo" | "note" | null>(null);
   const [photo, setPhoto] = useState<PhotoData | null>(null);
   const [note, setNote] = useState("");
   const [manualDate, setManualDate] = useState(todayString());
   const [isSaving, setIsSaving] = useState(false);
 
-  // Voice dictation modal
+  // Tag state
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [showNewTagInput, setShowNewTagInput] = useState(false);
+  const [newTagDraft, setNewTagDraft] = useState("");
+  const newTagRef = useRef<TextInput>(null);
+
+  // Voice modal
   const [voiceModalVisible, setVoiceModalVisible] = useState(false);
   const [voiceDraft, setVoiceDraft] = useState("");
   const voiceInputRef = useRef<TextInput>(null);
-
-  const currentLang = VOICE_LANGUAGES.find((l) => l.code === settings.voiceLanguage) ?? VOICE_LANGUAGES[0];
 
   const handleGalleryPick = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -122,6 +130,29 @@ export default function NewRecordScreen() {
     setMode("note");
   };
 
+  const handleSelectTag = (tag: string) => {
+    if (Platform.OS !== "web") Haptics.selectionAsync();
+    setSelectedTag((prev) => (prev === tag ? null : tag));
+    setShowNewTagInput(false);
+    setNewTagDraft("");
+  };
+
+  const handleNewTagOpen = () => {
+    setSelectedTag(null);
+    setShowNewTagInput(true);
+    setTimeout(() => newTagRef.current?.focus(), 100);
+  };
+
+  const handleNewTagConfirm = () => {
+    const tag = normalizeTag(newTagDraft);
+    if (tag) {
+      addTag(tag);
+      setSelectedTag(tag);
+    }
+    setShowNewTagInput(false);
+    setNewTagDraft("");
+  };
+
   const handleVoiceOpen = () => {
     setVoiceDraft("");
     setVoiceModalVisible(true);
@@ -147,6 +178,9 @@ export default function NewRecordScreen() {
     setPhoto(null);
     setNote("");
     setManualDate(todayString());
+    setSelectedTag(null);
+    setShowNewTagInput(false);
+    setNewTagDraft("");
   };
 
   const handleSave = async () => {
@@ -160,6 +194,7 @@ export default function NewRecordScreen() {
     const record: MemoryRecord = {
       id: generateId(),
       imageUri: photo?.uri,
+      tag: selectedTag ?? undefined,
       note: note.trim(),
       date: photo?.date ?? manualDate,
       location: undefined,
@@ -222,7 +257,6 @@ export default function NewRecordScreen() {
       color: colors.primaryForeground,
     },
     scroll: { flex: 1 },
-    // Mode picker (initial state)
     modePickerContainer: {
       flex: 1,
       justifyContent: "center",
@@ -259,7 +293,6 @@ export default function NewRecordScreen() {
       color: colors.mutedForeground,
       textAlign: "center",
     },
-    // Content sections
     section: { padding: 16, gap: 10 },
     sectionLabel: {
       fontSize: 12,
@@ -332,6 +365,78 @@ export default function NewRecordScreen() {
       fontSize: 15,
       fontFamily: "Inter_400Regular",
       color: colors.foreground,
+    },
+    // Tag section
+    tagRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      alignItems: "center",
+    },
+    tagChip: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 16,
+      backgroundColor: colors.card,
+      borderWidth: 1.5,
+      borderColor: colors.border,
+    },
+    tagChipActive: {
+      backgroundColor: colors.primary + "18",
+      borderColor: colors.primary,
+    },
+    tagChipText: {
+      fontSize: 13,
+      fontFamily: "Inter_500Medium",
+      color: colors.mutedForeground,
+    },
+    tagChipTextActive: {
+      color: colors.primary,
+    },
+    addTagBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 16,
+      borderWidth: 1.5,
+      borderColor: colors.border,
+      borderStyle: "dashed",
+    },
+    addTagBtnText: {
+      fontSize: 13,
+      fontFamily: "Inter_400Regular",
+      color: colors.mutedForeground,
+    },
+    newTagRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginTop: 4,
+    },
+    newTagInput: {
+      flex: 1,
+      backgroundColor: colors.card,
+      borderRadius: colors.radius,
+      borderWidth: 1.5,
+      borderColor: colors.primary,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      fontSize: 14,
+      fontFamily: "Inter_400Regular",
+      color: colors.foreground,
+    },
+    newTagConfirm: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: colors.radius,
+      backgroundColor: colors.primary,
+    },
+    newTagConfirmText: {
+      fontSize: 14,
+      fontFamily: "Inter_600SemiBold",
+      color: colors.primaryForeground,
     },
     noteContainer: {
       backgroundColor: colors.card,
@@ -516,7 +621,7 @@ export default function NewRecordScreen() {
         )}
       </View>
 
-      {/* Mode picker — shown only before choosing */}
+      {/* Mode picker — shown before choosing */}
       {!showContent ? (
         <View style={s.modePickerContainer}>
           <Text style={s.modePickerLabel}>What would you like to record?</Text>
@@ -592,6 +697,58 @@ export default function NewRecordScreen() {
                   placeholderTextColor={colors.mutedForeground}
                   keyboardType="numbers-and-punctuation"
                 />
+              </View>
+            )}
+          </View>
+
+          {/* Tag section */}
+          <View style={s.section}>
+            <Text style={s.sectionLabel}>Tag (optional)</Text>
+            <View style={s.tagRow}>
+              {knownTags.map((tag) => (
+                <Pressable
+                  key={tag}
+                  style={[s.tagChip, selectedTag === tag && s.tagChipActive]}
+                  onPress={() => handleSelectTag(tag)}
+                >
+                  <Text style={[s.tagChipText, selectedTag === tag && s.tagChipTextActive]}>
+                    #{tag}
+                  </Text>
+                </Pressable>
+              ))}
+              {!showNewTagInput && (
+                <Pressable style={s.addTagBtn} onPress={handleNewTagOpen}>
+                  <Feather name="plus" size={13} color={colors.mutedForeground} />
+                  <Text style={s.addTagBtnText}>New tag</Text>
+                </Pressable>
+              )}
+            </View>
+            {showNewTagInput && (
+              <View style={s.newTagRow}>
+                <TextInput
+                  ref={newTagRef}
+                  style={s.newTagInput}
+                  value={newTagDraft}
+                  onChangeText={setNewTagDraft}
+                  placeholder="travel, family, work…"
+                  placeholderTextColor={colors.mutedForeground}
+                  autoCapitalize="none"
+                  returnKeyType="done"
+                  onSubmitEditing={handleNewTagConfirm}
+                  maxLength={30}
+                />
+                <Pressable style={s.newTagConfirm} onPress={handleNewTagConfirm}>
+                  <Text style={s.newTagConfirmText}>Add</Text>
+                </Pressable>
+              </View>
+            )}
+            {selectedTag && (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Feather name="info" size={12} color={colors.mutedForeground} />
+                <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
+                  Obsidian filename: {manualDate}.{selectedTag}.
+                  {generateId().substring(0, 4)}
+                </Text>
               </View>
             )}
           </View>
