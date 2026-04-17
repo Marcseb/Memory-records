@@ -38,16 +38,31 @@ export function RecordsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const [rawRecords, rawTags] = await Promise.all([
-          AsyncStorage.getItem(RECORDS_KEY),
-          AsyncStorage.getItem(TAGS_KEY),
-        ]);
-        if (rawRecords) setRecords(JSON.parse(rawRecords));
-        if (rawTags) setKnownTags(JSON.parse(rawTags));
-      } catch {
-        // ignore
+        const rawRecords = await AsyncStorage.getItem(RECORDS_KEY);
+        if (rawRecords) {
+          try {
+            setRecords(JSON.parse(rawRecords));
+          } catch (e) {
+            console.warn("[RecordsContext] Failed to parse records:", e);
+          }
+        }
+      } catch (e) {
+        console.warn("[RecordsContext] Failed to load records:", e);
       } finally {
         setIsLoading(false);
+      }
+
+      try {
+        const rawTags = await AsyncStorage.getItem(TAGS_KEY);
+        if (rawTags) {
+          try {
+            setKnownTags(JSON.parse(rawTags));
+          } catch (e) {
+            console.warn("[RecordsContext] Failed to parse tags:", e);
+          }
+        }
+      } catch (e) {
+        console.warn("[RecordsContext] Failed to load tags:", e);
       }
     })();
   }, []);

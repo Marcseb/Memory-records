@@ -1,4 +1,5 @@
 import { Feather } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useState } from "react";
@@ -37,6 +38,40 @@ export default function SettingsScreen() {
   const handleLanguageSelect = async (lang: VoiceLanguage) => {
     if (Platform.OS !== "web") await Haptics.selectionAsync();
     await updateSettings({ voiceLanguage: lang });
+  };
+
+  const handleStorageDiagnostic = async () => {
+    try {
+      const rawRecords = await AsyncStorage.getItem("mr_records");
+      const rawTags = await AsyncStorage.getItem("mr_tags");
+      const rawSettings = await AsyncStorage.getItem("mr_obsidian_settings");
+      const rawUsers = await AsyncStorage.getItem("mr_users");
+
+      let recordCount = 0;
+      let firstRecordDate = "—";
+      if (rawRecords) {
+        try {
+          const arr = JSON.parse(rawRecords);
+          recordCount = arr.length;
+          if (arr.length > 0) firstRecordDate = arr[arr.length - 1].date ?? "unknown";
+        } catch { /* ignore */ }
+      }
+
+      const tagCount = rawTags ? (() => { try { return JSON.parse(rawTags).length; } catch { return 0; } })() : 0;
+      const hasSettings = !!rawSettings;
+      const hasUsers = !!rawUsers;
+
+      Alert.alert(
+        "Storage Diagnostic",
+        `Records in storage: ${recordCount}` +
+        (recordCount > 0 ? `\nOldest record date: ${firstRecordDate}` : "\n⚠️ No records found in storage") +
+        `\n\nTags saved: ${tagCount}` +
+        `\nSettings present: ${hasSettings ? "yes" : "no"}` +
+        `\nUser accounts present: ${hasUsers ? "yes" : "no"}`
+      );
+    } catch (e) {
+      Alert.alert("Diagnostic Error", String(e));
+    }
   };
 
   const handleLogout = () => {
@@ -341,11 +376,16 @@ export default function SettingsScreen() {
         <View style={s.section}>
           <Text style={s.sectionTitle}>About</Text>
           <View style={s.card}>
-            <View style={s.row}>
+            <View style={[s.row, s.rowBorder]}>
               <Feather name="info" size={18} color={colors.primary} />
               <Text style={s.rowLabel}>Memory Records</Text>
               <Text style={s.rowValue}>v1.0</Text>
             </View>
+            <Pressable style={s.row} onPress={handleStorageDiagnostic}>
+              <Feather name="database" size={18} color={colors.mutedForeground} />
+              <Text style={[s.rowLabel, { color: colors.mutedForeground }]}>Storage diagnostic</Text>
+              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+            </Pressable>
           </View>
         </View>
       </KeyboardAwareScrollView>
