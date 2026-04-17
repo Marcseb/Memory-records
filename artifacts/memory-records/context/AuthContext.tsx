@@ -14,6 +14,7 @@ interface AuthContextType {
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
+  resetCredentials: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -124,8 +125,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   };
 
+  const resetCredentials = async () => {
+    await AsyncStorage.removeItem(USERS_KEY);
+    await secureDelete(SESSION_KEY);
+    setUser(null);
+  };
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, register, logout, resetCredentials }}>
       {children}
     </AuthContext.Provider>
   );

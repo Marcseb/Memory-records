@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import React, { useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -19,12 +20,30 @@ import { useColors } from "@/hooks/useColors";
 export default function LoginScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { login } = useAuth();
+  const { login, resetCredentials } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+
+  const handleReset = () => {
+    Alert.alert(
+      "Reset credentials",
+      "This will delete your username and password so you can register again. Your records, tags, and settings will not be affected.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reset",
+          style: "destructive",
+          onPress: async () => {
+            await resetCredentials();
+            router.replace("/(auth)/register");
+          },
+        },
+      ]
+    );
+  };
 
   const handleLogin = async () => {
     if (!username.trim() || !password.trim()) {
@@ -220,6 +239,15 @@ export default function LoginScreen() {
               <Text style={s.footerLink}>Register</Text>
             </Pressable>
           </View>
+
+          <Pressable onPress={handleReset} style={{ alignItems: "center", marginTop: 16 }}>
+            <Text style={[s.footerText, { color: colors.mutedForeground, fontSize: 13 }]}>
+              Forgot credentials?{" "}
+              <Text style={{ color: colors.destructive, fontFamily: "Inter_500Medium" }}>
+                Reset account
+              </Text>
+            </Text>
+          </Pressable>
         </View>
       </KeyboardAvoidingView>
     </View>
