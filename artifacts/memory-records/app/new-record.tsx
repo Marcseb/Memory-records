@@ -92,6 +92,7 @@ export default function NewRecordScreen() {
   const [note, setNote] = useState("");
   const [manualDate, setManualDate] = useState(todayString());
   const [isSaving, setIsSaving] = useState(false);
+  const [savedBanner, setSavedBanner] = useState(false);
 
   // Tag state — ordered array; index 0 is the primary tag (drives filename)
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -242,7 +243,16 @@ export default function NewRecordScreen() {
     }
 
     setIsSaving(false);
-    router.back();
+
+    // If an interview is in progress, stay on screen so the conversation
+    // continues — just clear the note and show a brief confirmation.
+    if (interviewEnabled) {
+      setNote("");
+      setSavedBanner(true);
+      setTimeout(() => setSavedBanner(false), 2500);
+    } else {
+      router.back();
+    }
   };
 
   const hasExifDate = photo?.hasMetadata && !!photo.date;
@@ -607,6 +617,21 @@ export default function NewRecordScreen() {
       color: colors.mutedForeground,
       fontStyle: "italic",
     },
+    savedBanner: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      backgroundColor: colors.success + "18",
+      borderBottomWidth: 1,
+      borderBottomColor: colors.success + "30",
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+    },
+    savedBannerText: {
+      fontSize: 13,
+      fontFamily: "Inter_500Medium",
+      color: colors.success,
+    },
     // Voice modal
     modalOverlay: {
       flex: 1,
@@ -735,11 +760,19 @@ export default function NewRecordScreen() {
             {isSaving ? (
               <ActivityIndicator size="small" color={colors.primaryForeground} />
             ) : (
-              <Text style={s.saveBtnText}>Save</Text>
+              <Text style={s.saveBtnText}>{interviewEnabled ? "Save note" : "Save"}</Text>
             )}
           </Pressable>
         )}
       </View>
+
+      {/* Saved confirmation banner — shown during interview after each save */}
+      {savedBanner && (
+        <View style={s.savedBanner}>
+          <Feather name="check-circle" size={15} color={colors.success} />
+          <Text style={s.savedBannerText}>Note saved — interview continues below</Text>
+        </View>
+      )}
 
       {/* Mode picker — shown before choosing */}
       {!showContent ? (

@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 
 const API_URL = process.env["EXPO_PUBLIC_API_URL"] ?? "";
 
-interface ChatMessage {
+export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
 }
@@ -17,64 +17,77 @@ interface UseInterviewResult {
   reset: () => void;
 }
 
+async function fetchFromAPI(messages: ChatMessage[], tags: string[]): Promise<string> {
+  if (!API_URL) throw new Error("API URL not configured.");
+  const res = await fetch(`${API_URL}/api/interview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages, tags }),
+  });
+  const data = (await res.json()) as { question?: string; error?: string };
+  if (!res.ok || !data.question) {
+    throw new Error(data.error ?? `Server error ${res.status}`);
+  }
+  return data.question;
+}
+
 export function useInterview(): UseInterviewResult {
   const [question, setQuestion] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Full conversation history: alternating user / assistant, starting with user.
   const [history, setHistory] = useState<ChatMessage[]>([]);
 
-  const fetchQuestion = useCallback(async (messages: ChatMessage[], tags: string[]) => {
-    if (!API_URL) {
-      setError("API URL not configured.");
-      return;
-    }
+  const startInterview = useCallback(async (tags: string[] = []) => {
     setIsLoading(true);
     setError(null);
+    setQuestion(null);
+
+    const seed: ChatMessage = {
+      role: "user",
+      content: "Please start the interview with your first question.",
+    };
+
     try {
-      const res = await fetch(`${API_URL}/api/interview`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages, tags }),
-      });
-      const data = (await res.json()) as { question?: string; error?: string };
-      if (!res.ok || !data.question) {
-        throw new Error(data.error ?? `Server error ${res.status}`);
-      }
-      setQuestion(data.question);
-      setHistory((prev) => [...prev, { role: "assistant", content: data.question! }]);
+      const q = await fetchFromAPI([seed], tags);
+      const initialHistory: ChatMessage[] = [seed, { role: "assistant", content: q }];
+      setHistory(initialHistory);
+      setQuestion(q);
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Could not reach AI service.";
-      setError(msg);
+      setError(e instanceof Error ? e.message : "Could not reach AI service.");
     } finally {
       setIsLoading(false);
     }
   }, []);
 
-  const startInterview = useCallback(
-    async (tags: string[] = []) => {
-      const initialMessages: ChatMessage[] = [
-        { role: "user", content: "Please start the interview with your first question." },
-      ];
-      setHistory([]);
-      setQuestion(null);
-      await fetchQuestion(initialMessages, tags);
-    },
-    [fetchQuestion]
-  );
-
   const nextQuestion = useCallback(
     async (userNote: string, tags: string[] = []) => {
+      setIsLoading(true);
+      setError(null);
+
       const userMsg: ChatMessage = {
         role: "user",
         content: userNote.trim()
-          ? `My answer / note so far: "${userNote.trim()}"\n\nPlease ask me your next follow-up question.`
-          : "Please ask your next question.",
+          ? `Here is what I've written about that: "${userNote.trim()}"\n\nPlease ask your next follow-up question.`
+          : "Please continue with your next question.",
       };
+
       const updatedHistory = [...history, userMsg];
-      setHistory(updatedHistory);
-      await fetchQuestion(updatedHistory, tags);
+
+      try {
+        const q = await fetchFromAPI(updatedHistory, tags);
+        const newHistory: ChatMessage[] = [...updatedHistory, { role: "assistant", content: q }];
+        setHistory(newHistory);
+        setQuestion(q);
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : "Could not reach AI service.");
+        // Roll back the optimistic user message so history stays consistent
+        setHistory(history);
+      } finally {
+        setIsLoading(false);
+      }
     },
-    [history, fetchQuestion]
+    [history]
   );
 
   const reset = useCallback(() => {
