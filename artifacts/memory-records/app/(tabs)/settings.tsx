@@ -15,6 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useAuth } from "@/context/AuthContext";
+import { useRecords } from "@/context/RecordsContext";
 import { VoiceLanguage, VOICE_LANGUAGES, useSettings } from "@/context/SettingsContext";
 import { useColors } from "@/hooks/useColors";
 
@@ -22,6 +23,7 @@ export default function SettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user, logout } = useAuth();
+  const { knownTags, deleteTag } = useRecords();
   const { settings, updateSettings } = useSettings();
   const [vaultName, setVaultName] = useState(settings.vaultName);
   const [folder, setFolder] = useState(settings.folder);
@@ -38,6 +40,17 @@ export default function SettingsScreen() {
   const handleLanguageSelect = async (lang: VoiceLanguage) => {
     if (Platform.OS !== "web") await Haptics.selectionAsync();
     await updateSettings({ voiceLanguage: lang });
+  };
+
+  const handleDeleteTag = (tag: string) => {
+    Alert.alert(
+      `Delete tag "#${tag}"?`,
+      "This removes it from the tag list. Existing records that use it are not affected.",
+      [
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: () => deleteTag(tag) },
+      ]
+    );
   };
 
   const handleStorageDiagnostic = async () => {
@@ -312,6 +325,28 @@ export default function SettingsScreen() {
               Selected language is used for speech recognition when recording voice notes. Default: Français.
             </Text>
           </View>
+        </View>
+
+        {/* Tags */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Tags</Text>
+          {knownTags.length === 0 ? (
+            <View style={s.infoBox}>
+              <Text style={s.infoText}>No tags yet. Add tags when creating a new record.</Text>
+            </View>
+          ) : (
+            <View style={s.card}>
+              {knownTags.map((tag, i) => (
+                <View key={tag} style={[s.row, i < knownTags.length - 1 && s.rowBorder]}>
+                  <Feather name="tag" size={16} color={colors.primary} />
+                  <Text style={s.rowLabel}>#{tag}</Text>
+                  <Pressable onPress={() => handleDeleteTag(tag)} hitSlop={10}>
+                    <Feather name="trash-2" size={16} color={colors.destructive} />
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
 
         {/* Obsidian */}

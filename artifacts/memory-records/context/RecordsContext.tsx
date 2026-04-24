@@ -23,6 +23,7 @@ interface RecordsContextType {
   isLoading: boolean;
   knownTags: string[];
   addTag: (tag: string) => Promise<void>;
+  deleteTag: (tag: string) => Promise<void>;
 }
 
 const RecordsContext = createContext<RecordsContextType | null>(null);
@@ -106,8 +107,16 @@ export function RecordsProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const deleteTag = useCallback(async (tag: string) => {
+    setKnownTags((prev) => {
+      const next = prev.filter((t) => t !== tag);
+      AsyncStorage.setItem(TAGS_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
   return (
-    <RecordsContext.Provider value={{ records, addRecord, updateRecord, deleteRecord, isLoading, knownTags, addTag }}>
+    <RecordsContext.Provider value={{ records, addRecord, updateRecord, deleteRecord, isLoading, knownTags, addTag, deleteTag }}>
       {children}
     </RecordsContext.Provider>
   );
