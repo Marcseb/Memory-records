@@ -23,6 +23,7 @@ import { useAuth } from "@/context/AuthContext";
 import { MemoryRecord, useRecords } from "@/context/RecordsContext";
 import { useSettings } from "@/context/SettingsContext";
 import { useObsidian } from "@/hooks/useObsidian";
+import { useInterview } from "@/hooks/useInterview";
 import { useColors } from "@/hooks/useColors";
 
 interface PhotoData {
@@ -98,6 +99,10 @@ export default function NewRecordScreen() {
   const [newTagDraft, setNewTagDraft] = useState("");
   const newTagRef = useRef<TextInput>(null);
 
+  // Interview state
+  const [interviewEnabled, setInterviewEnabled] = useState(false);
+  const { question, isLoading: interviewLoading, error: interviewError, startInterview, nextQuestion, reset: resetInterview } = useInterview();
+
   // Voice modal
   const [voiceModalVisible, setVoiceModalVisible] = useState(false);
   const [voiceDraft, setVoiceDraft] = useState("");
@@ -154,6 +159,22 @@ export default function NewRecordScreen() {
     setNewTagDraft("");
   };
 
+  const handleToggleInterview = async () => {
+    if (Platform.OS !== "web") Haptics.selectionAsync();
+    if (!interviewEnabled) {
+      setInterviewEnabled(true);
+      await startInterview(selectedTags);
+    } else {
+      setInterviewEnabled(false);
+      resetInterview();
+    }
+  };
+
+  const handleNextQuestion = async () => {
+    if (Platform.OS !== "web") Haptics.selectionAsync();
+    await nextQuestion(note, selectedTags);
+  };
+
   const handleVoiceOpen = () => {
     setVoiceDraft("");
     setVoiceModalVisible(true);
@@ -182,6 +203,8 @@ export default function NewRecordScreen() {
     setSelectedTags([]);
     setShowNewTagInput(false);
     setNewTagDraft("");
+    setInterviewEnabled(false);
+    resetInterview();
   };
 
   const handleSave = async () => {
@@ -502,6 +525,88 @@ export default function NewRecordScreen() {
       fontFamily: "Inter_400Regular",
       color: settings.configured ? colors.success : colors.mutedForeground,
     },
+    // Interview section
+    interviewHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    interviewToggleBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 16,
+      borderWidth: 1.5,
+      borderColor: colors.primary,
+      backgroundColor: colors.primary + "12",
+    },
+    interviewToggleBtnOff: {
+      borderColor: colors.border,
+      backgroundColor: "transparent",
+    },
+    interviewToggleText: {
+      fontSize: 13,
+      fontFamily: "Inter_500Medium",
+      color: colors.primary,
+    },
+    interviewToggleTextOff: {
+      color: colors.mutedForeground,
+    },
+    interviewBubble: {
+      backgroundColor: colors.primary + "10",
+      borderRadius: colors.radius,
+      borderLeftWidth: 3,
+      borderLeftColor: colors.primary,
+      padding: 14,
+      gap: 4,
+    },
+    interviewBubbleLabel: {
+      fontSize: 11,
+      fontFamily: "Inter_600SemiBold",
+      color: colors.primary,
+      textTransform: "uppercase",
+      letterSpacing: 0.6,
+    },
+    interviewBubbleText: {
+      fontSize: 15,
+      fontFamily: "Inter_400Regular",
+      color: colors.foreground,
+      lineHeight: 22,
+    },
+    interviewBubbleError: {
+      fontSize: 13,
+      fontFamily: "Inter_400Regular",
+      color: colors.destructive,
+      lineHeight: 20,
+    },
+    interviewActions: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "flex-end",
+      gap: 10,
+    },
+    interviewNextBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 16,
+      backgroundColor: colors.primary,
+    },
+    interviewNextBtnText: {
+      fontSize: 13,
+      fontFamily: "Inter_600SemiBold",
+      color: colors.primaryForeground,
+    },
+    interviewHint: {
+      fontSize: 12,
+      fontFamily: "Inter_400Regular",
+      color: colors.mutedForeground,
+      fontStyle: "italic",
+    },
     // Voice modal
     modalOverlay: {
       flex: 1,
@@ -773,6 +878,58 @@ export default function NewRecordScreen() {
                   Filename uses first tag: <Text style={{ fontFamily: "Inter_500Medium" }}>{selectedTags[0]}</Text>
                   {selectedTags.length > 1 && `  ·  all tags saved in note`}
                 </Text>
+              </View>
+            )}
+          </View>
+
+          {/* AI Interviewer section */}
+          <View style={s.section}>
+            <View style={s.interviewHeader}>
+              <Text style={s.sectionLabel}>AI Interviewer</Text>
+              <Pressable
+                style={[s.interviewToggleBtn, !interviewEnabled && s.interviewToggleBtnOff]}
+                onPress={handleToggleInterview}
+                disabled={interviewLoading}
+              >
+                <Feather
+                  name={interviewEnabled ? "zap" : "zap-off"}
+                  size={13}
+                  color={interviewEnabled ? colors.primary : colors.mutedForeground}
+                />
+                <Text style={[s.interviewToggleText, !interviewEnabled && s.interviewToggleTextOff]}>
+                  {interviewEnabled ? "On" : "Start interview"}
+                </Text>
+              </Pressable>
+            </View>
+
+            {interviewEnabled && (
+              <View style={{ gap: 10 }}>
+                {interviewLoading ? (
+                  <View style={s.interviewBubble}>
+                    <Text style={s.interviewBubbleLabel}>Interviewer</Text>
+                    <ActivityIndicator size="small" color={colors.primary} style={{ alignSelf: "flex-start", marginTop: 4 }} />
+                  </View>
+                ) : interviewError ? (
+                  <View style={[s.interviewBubble, { borderLeftColor: colors.destructive, backgroundColor: colors.destructive + "10" }]}>
+                    <Text style={[s.interviewBubbleLabel, { color: colors.destructive }]}>Error</Text>
+                    <Text style={s.interviewBubbleError}>{interviewError}</Text>
+                  </View>
+                ) : question ? (
+                  <View style={s.interviewBubble}>
+                    <Text style={s.interviewBubbleLabel}>Interviewer</Text>
+                    <Text style={s.interviewBubbleText}>{question}</Text>
+                  </View>
+                ) : null}
+
+                {question && !interviewLoading && (
+                  <View style={s.interviewActions}>
+                    <Text style={s.interviewHint}>Answer below, then tap for a follow-up</Text>
+                    <Pressable style={s.interviewNextBtn} onPress={handleNextQuestion}>
+                      <Feather name="chevron-right" size={14} color={colors.primaryForeground} />
+                      <Text style={s.interviewNextBtnText}>Next question</Text>
+                    </Pressable>
+                  </View>
+                )}
               </View>
             )}
           </View>
