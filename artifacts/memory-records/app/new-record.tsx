@@ -935,6 +935,29 @@ export default function NewRecordScreen() {
               </Pressable>
             </View>
 
+            {interviewEnabled && selectedTags.length > 0 && (
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                <Feather name="target" size={12} color={colors.primary} />
+                <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
+                  Focused on:
+                </Text>
+                {selectedTags.map((tag) => (
+                  <View key={tag} style={{ backgroundColor: colors.primary + "18", borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 }}>
+                    <Text style={{ fontSize: 12, fontFamily: "Inter_600SemiBold", color: colors.primary }}>#{tag}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {interviewEnabled && selectedTags.length === 0 && (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                <Feather name="info" size={12} color={colors.mutedForeground} />
+                <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground, fontStyle: "italic" }}>
+                  Select tags above to focus questions on a specific topic
+                </Text>
+              </View>
+            )}
+
             {interviewEnabled && (
               <View style={{ gap: 10 }}>
                 {interviewLoading ? (

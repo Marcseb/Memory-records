@@ -107,7 +107,7 @@ router.post("/interview", async (req, res) => {
 
     const tagContext =
       tags.length > 0
-        ? `\n\nThe user's memory record is tagged with: ${tags.map((t) => `#${t}`).join(", ")}. Tailor your questions around these themes when appropriate.`
+        ? `\n\nFOCUS TOPICS: The user has selected these tags for this memory session: ${tags.map((t) => `#${t}`).join(", ")}.\nYour questions MUST stay focused on memories related to these specific topics. Do not ask about unrelated life areas. Every question should be directly connected to at least one of these themes.`
         : "";
 
     const fullMessages: ChatMessage[] = [
