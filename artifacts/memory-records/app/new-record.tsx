@@ -92,8 +92,8 @@ export default function NewRecordScreen() {
   const [manualDate, setManualDate] = useState(todayString());
   const [isSaving, setIsSaving] = useState(false);
 
-  // Tag state
-  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  // Tag state — ordered array; index 0 is the primary tag (drives filename)
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [showNewTagInput, setShowNewTagInput] = useState(false);
   const [newTagDraft, setNewTagDraft] = useState("");
   const newTagRef = useRef<TextInput>(null);
@@ -132,13 +132,14 @@ export default function NewRecordScreen() {
 
   const handleSelectTag = (tag: string) => {
     if (Platform.OS !== "web") Haptics.selectionAsync();
-    setSelectedTag((prev) => (prev === tag ? null : tag));
+    setSelectedTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+    );
     setShowNewTagInput(false);
     setNewTagDraft("");
   };
 
   const handleNewTagOpen = () => {
-    setSelectedTag(null);
     setShowNewTagInput(true);
     setTimeout(() => newTagRef.current?.focus(), 100);
   };
@@ -147,7 +148,7 @@ export default function NewRecordScreen() {
     const tag = normalizeTag(newTagDraft);
     if (tag) {
       addTag(tag);
-      setSelectedTag(tag);
+      setSelectedTags((prev) => (prev.includes(tag) ? prev : [...prev, tag]));
     }
     setShowNewTagInput(false);
     setNewTagDraft("");
@@ -178,7 +179,7 @@ export default function NewRecordScreen() {
     setPhoto(null);
     setNote("");
     setManualDate(todayString());
-    setSelectedTag(null);
+    setSelectedTags([]);
     setShowNewTagInput(false);
     setNewTagDraft("");
   };
@@ -194,7 +195,7 @@ export default function NewRecordScreen() {
     const record: MemoryRecord = {
       id: generateId(),
       imageUri: photo?.uri,
-      tag: selectedTag ?? undefined,
+      tags: selectedTags.length > 0 ? selectedTags : undefined,
       note: note.trim(),
       date: photo?.date ?? manualDate,
       location: undefined,
@@ -392,6 +393,20 @@ export default function NewRecordScreen() {
     },
     tagChipTextActive: {
       color: colors.primary,
+    },
+    tagOrderBadge: {
+      width: 16,
+      height: 16,
+      borderRadius: 8,
+      backgroundColor: colors.primary,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    tagOrderBadgeText: {
+      fontSize: 10,
+      fontFamily: "Inter_700Bold",
+      color: colors.primaryForeground,
+      lineHeight: 12,
     },
     addTagBtn: {
       flexDirection: "row",
@@ -703,19 +718,28 @@ export default function NewRecordScreen() {
 
           {/* Tag section */}
           <View style={s.section}>
-            <Text style={s.sectionLabel}>Tag (optional)</Text>
+            <Text style={s.sectionLabel}>Tags (optional)</Text>
             <View style={s.tagRow}>
-              {knownTags.map((tag) => (
-                <Pressable
-                  key={tag}
-                  style={[s.tagChip, selectedTag === tag && s.tagChipActive]}
-                  onPress={() => handleSelectTag(tag)}
-                >
-                  <Text style={[s.tagChipText, selectedTag === tag && s.tagChipTextActive]}>
-                    #{tag}
-                  </Text>
-                </Pressable>
-              ))}
+              {knownTags.map((tag) => {
+                const orderIndex = selectedTags.indexOf(tag);
+                const isSelected = orderIndex !== -1;
+                return (
+                  <Pressable
+                    key={tag}
+                    style={[s.tagChip, isSelected && s.tagChipActive]}
+                    onPress={() => handleSelectTag(tag)}
+                  >
+                    {isSelected && (
+                      <View style={s.tagOrderBadge}>
+                        <Text style={s.tagOrderBadgeText}>{orderIndex + 1}</Text>
+                      </View>
+                    )}
+                    <Text style={[s.tagChipText, isSelected && s.tagChipTextActive]}>
+                      #{tag}
+                    </Text>
+                  </Pressable>
+                );
+              })}
               {!showNewTagInput && (
                 <Pressable style={s.addTagBtn} onPress={handleNewTagOpen}>
                   <Feather name="plus" size={13} color={colors.mutedForeground} />
@@ -742,12 +766,12 @@ export default function NewRecordScreen() {
                 </Pressable>
               </View>
             )}
-            {selectedTag && (
+            {selectedTags.length > 0 && (
               <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                 <Feather name="info" size={12} color={colors.mutedForeground} />
                 <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
-                  Obsidian filename: {manualDate}.{selectedTag}.
-                  {generateId().substring(0, 4)}
+                  Filename uses first tag: <Text style={{ fontFamily: "Inter_500Medium" }}>{selectedTags[0]}</Text>
+                  {selectedTags.length > 1 && `  ·  all tags saved in note`}
                 </Text>
               </View>
             )}

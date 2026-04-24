@@ -4,7 +4,7 @@ import React, { createContext, useCallback, useContext, useEffect, useState } fr
 export interface MemoryRecord {
   id: string;
   imageUri?: string;
-  tag?: string;
+  tags?: string[];
   note: string;
   date: string;
   location?: string;

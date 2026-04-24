@@ -142,10 +142,15 @@ export function RecordCard({ record, onPress, onDelete }: Props) {
         <Text style={s.date}>{record.date}</Text>
         <Text style={s.note} numberOfLines={2}>{notePreview}</Text>
         <View style={s.meta}>
-          {record.tag ? (
-            <View style={[s.badge, { backgroundColor: colors.primary + "18" }]}>
-              <Text style={[s.badgeText, { color: colors.primary }]}>#{record.tag}</Text>
-            </View>
+          {record.tags && record.tags.length > 0
+            ? record.tags.slice(0, 2).map((tag) => (
+                <View key={tag} style={[s.badge, { backgroundColor: colors.primary + "18" }]}>
+                  <Text style={[s.badgeText, { color: colors.primary }]}>#{tag}</Text>
+                </View>
+              ))
+            : null}
+          {record.tags && record.tags.length > 2 ? (
+            <Text style={[s.badgeText, { color: colors.mutedForeground }]}>+{record.tags.length - 2}</Text>
           ) : null}
           {record.location ? (
             <>

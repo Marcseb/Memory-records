@@ -23,9 +23,10 @@ function isoToDMY(iso: string): string {
  */
 function buildFilename(record: MemoryRecord, tagOrder: number): string {
   const dmy = isoToDMY(record.date);
-  if (record.tag) {
+  const primaryTag = record.tags?.[0];
+  if (primaryTag) {
     const nn = String(tagOrder).padStart(2, "0");
-    return sanitizeFilename(`${dmy}_${record.tag}_${nn}`);
+    return sanitizeFilename(`${dmy}_${primaryTag}_${nn}`);
   }
   return sanitizeFilename(`${dmy}_${record.id.substring(0, 8)}`);
 }
@@ -34,7 +35,9 @@ function formatMarkdown(record: MemoryRecord, username: string): string {
   const lines: string[] = [];
 
   lines.push(`**Date:** ${record.date}`);
-  if (record.tag) lines.push(`**Tag:** #${record.tag}`);
+  if (record.tags && record.tags.length > 0) {
+    lines.push(`**Tags:** ${record.tags.map((t) => `#${t}`).join("  ")}`);
+  }
   if (record.location) lines.push(`**Location:** ${record.location}`);
   if (record.lat && record.lng) {
     lines.push(`**Coordinates:** ${record.lat.toFixed(5)}, ${record.lng.toFixed(5)}`);
@@ -72,11 +75,12 @@ export function useObsidian() {
       return { ok: false, reason: "not_configured" };
     }
 
-    // Compute sequential order number for this tag (1-based).
+    // Compute sequential order number for the primary tag (first in array).
     // At the time of calling, the current record may or may not be in the
     // records list yet (React state batching), so we exclude it by id and add 1.
-    const tagOrder = record.tag
-      ? records.filter((r) => r.tag === record.tag && r.id !== record.id).length + 1
+    const primaryTag = record.tags?.[0];
+    const tagOrder = primaryTag
+      ? records.filter((r) => r.tags?.[0] === primaryTag && r.id !== record.id).length + 1
       : 1;
 
     const content = formatMarkdown(record, username);
