@@ -1,7 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as SecureStore from "expo-secure-store";
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { Platform } from "react-native";
 
 interface User {
   username: string;
@@ -22,27 +20,6 @@ const AuthContext = createContext<AuthContextType | null>(null);
 const USERS_KEY = "mr_users";
 const SESSION_KEY = "mr_session";
 
-async function secureGet(key: string): Promise<string | null> {
-  if (Platform.OS === "web") {
-    return AsyncStorage.getItem(key);
-  }
-  return SecureStore.getItemAsync(key);
-}
-
-async function secureSet(key: string, value: string): Promise<void> {
-  if (Platform.OS === "web") {
-    return AsyncStorage.setItem(key, value);
-  }
-  return SecureStore.setItemAsync(key, value);
-}
-
-async function secureDelete(key: string): Promise<void> {
-  if (Platform.OS === "web") {
-    return AsyncStorage.removeItem(key);
-  }
-  return SecureStore.deleteItemAsync(key);
-}
-
 function hashPassword(password: string): string {
   let hash = 0;
   for (let i = 0; i < password.length; i++) {
@@ -60,7 +37,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const session = await secureGet(SESSION_KEY);
+        const session = await AsyncStorage.getItem(SESSION_KEY);
         if (session) {
           setUser(JSON.parse(session));
         }
@@ -86,7 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       const token = Date.now().toString() + Math.random().toString(36).substr(2, 9);
       const userData: User = { username: key, token };
-      await secureSet(SESSION_KEY, JSON.stringify(userData));
+      await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(userData));
       setUser(userData);
       return { success: true };
     } catch {
@@ -112,7 +89,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await AsyncStorage.setItem(USERS_KEY, JSON.stringify(users));
       const token = Date.now().toString() + Math.random().toString(36).substr(2, 9);
       const userData: User = { username: key, token };
-      await secureSet(SESSION_KEY, JSON.stringify(userData));
+      await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(userData));
       setUser(userData);
       return { success: true };
     } catch {
@@ -121,13 +98,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
-    await secureDelete(SESSION_KEY);
+    await AsyncStorage.removeItem(SESSION_KEY);
     setUser(null);
   };
 
   const resetCredentials = async () => {
     await AsyncStorage.removeItem(USERS_KEY);
-    await secureDelete(SESSION_KEY);
+    await AsyncStorage.removeItem(SESSION_KEY);
     setUser(null);
   };
 
