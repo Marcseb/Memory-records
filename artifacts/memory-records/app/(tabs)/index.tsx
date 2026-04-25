@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -21,7 +22,7 @@ export default function HomeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { records, deleteRecord, isLoading } = useRecords();
+  const { records, deleteRecord, updateRecord, isLoading } = useRecords();
   const [refreshing] = useState(false);
 
   const handleDelete = (record: MemoryRecord) => {
@@ -36,6 +37,21 @@ export default function HomeScreen() {
         },
       },
     ]);
+  };
+
+  const handleAddPhoto = async (record: MemoryRecord) => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert("Permission Required", "Allow access to your photo library to pick images.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      quality: 0.85,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    await updateRecord(record.id, { imageUri: result.assets[0].uri });
   };
 
   const handleNewRecord = async () => {
@@ -168,6 +184,7 @@ export default function HomeScreen() {
             record={item}
             onPress={() => router.push({ pathname: "/record/[id]", params: { id: item.id } })}
             onDelete={() => handleDelete(item)}
+            onAddPhoto={item.imageUri ? undefined : () => handleAddPhoto(item)}
           />
         )}
       />

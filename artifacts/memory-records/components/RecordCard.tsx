@@ -11,11 +11,12 @@ interface Props {
   record: MemoryRecord;
   onPress: () => void;
   onDelete: () => void;
+  onAddPhoto?: () => void;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-export function RecordCard({ record, onPress, onDelete }: Props) {
+export function RecordCard({ record, onPress, onDelete, onAddPhoto }: Props) {
   const colors = useColors();
   const scale = useSharedValue(1);
 
@@ -66,6 +67,14 @@ export function RecordCard({ record, onPress, onDelete }: Props) {
       backgroundColor: colors.surface,
       alignItems: "center",
       justifyContent: "center",
+      gap: 4,
+    },
+    noPhotoHint: {
+      fontSize: 9,
+      fontFamily: "Inter_500Medium",
+      color: colors.mutedForeground,
+      textAlign: "center",
+      paddingHorizontal: 4,
     },
     content: {
       flex: 1,
@@ -134,9 +143,20 @@ export function RecordCard({ record, onPress, onDelete }: Props) {
       {record.imageUri ? (
         <Image source={{ uri: record.imageUri }} style={s.thumbnail} contentFit="cover" />
       ) : (
-        <View style={s.noPhotoThumb}>
-          <Feather name="file-text" size={26} color={colors.mutedForeground} />
-        </View>
+        <Pressable
+          style={s.noPhotoThumb}
+          onPress={onAddPhoto}
+          hitSlop={4}
+        >
+          <Feather
+            name="camera"
+            size={22}
+            color={onAddPhoto ? colors.primary : colors.mutedForeground}
+          />
+          {onAddPhoto && (
+            <Text style={s.noPhotoHint}>Add photo</Text>
+          )}
+        </Pressable>
       )}
       <View style={s.content}>
         <Text style={s.date}>{record.date}</Text>
