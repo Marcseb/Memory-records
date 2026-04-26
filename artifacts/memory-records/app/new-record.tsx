@@ -95,8 +95,20 @@ export default function NewRecordScreen() {
   const [note, setNote] = useState("");
   const [manualDate, setManualDate] = useState(todayString());
   const [contextYear, setContextYear] = useState<number | undefined>(undefined);
+  const [yearInputActive, setYearInputActive] = useState(false);
+  const [yearInputText, setYearInputText] = useState("");
+  const yearInputRef = useRef<TextInput>(null);
   const [isSaving, setIsSaving] = useState(false);
   const currentYear = new Date().getFullYear();
+
+  const commitYearInput = () => {
+    const parsed = parseInt(yearInputText, 10);
+    if (!isNaN(parsed) && parsed >= 1900 && parsed <= currentYear) {
+      setContextYear(parsed);
+    }
+    setYearInputActive(false);
+    setYearInputText("");
+  };
   const [savedBanner, setSavedBanner] = useState(false);
 
   // Tag state — ordered array; index 0 is the primary tag (drives filename)
@@ -475,6 +487,17 @@ export default function NewRecordScreen() {
     yearStepperValueEmpty: {
       color: colors.mutedForeground,
       fontFamily: "Inter_400Regular",
+    },
+    yearInputField: {
+      minWidth: 46,
+      textAlign: "center",
+      fontSize: 15,
+      fontFamily: "Inter_600SemiBold",
+      color: colors.foreground,
+      borderBottomWidth: 1.5,
+      borderBottomColor: colors.primary,
+      paddingBottom: 2,
+      paddingHorizontal: 4,
     },
     // Tag section
     tagRow: {
@@ -971,9 +994,33 @@ export default function NewRecordScreen() {
                 >
                   <Feather name="minus" size={14} color={colors.foreground} />
                 </Pressable>
-                <Text style={[s.yearStepperValue, !contextYear && s.yearStepperValueEmpty]}>
-                  {contextYear ? String(contextYear) : "—"}
-                </Text>
+                {yearInputActive ? (
+                  <TextInput
+                    ref={yearInputRef}
+                    style={s.yearInputField}
+                    value={yearInputText}
+                    onChangeText={setYearInputText}
+                    keyboardType="number-pad"
+                    maxLength={4}
+                    returnKeyType="done"
+                    onSubmitEditing={commitYearInput}
+                    onBlur={commitYearInput}
+                    autoFocus
+                  />
+                ) : (
+                  <Pressable
+                    onPress={() => {
+                      setYearInputText(contextYear ? String(contextYear) : "");
+                      setYearInputActive(true);
+                      setTimeout(() => yearInputRef.current?.focus(), 50);
+                    }}
+                    hitSlop={6}
+                  >
+                    <Text style={[s.yearStepperValue, !contextYear && s.yearStepperValueEmpty]}>
+                      {contextYear ? String(contextYear) : "—"}
+                    </Text>
+                  </Pressable>
+                )}
                 <Pressable
                   style={s.yearStepperBtn}
                   onPress={() => {
