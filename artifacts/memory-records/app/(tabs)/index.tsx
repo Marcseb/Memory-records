@@ -14,14 +14,12 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { RecordCard } from "@/components/RecordCard";
-import { useAuth } from "@/context/AuthContext";
 import { MemoryRecord, useRecords } from "@/context/RecordsContext";
 import { useColors } from "@/hooks/useColors";
 
 export default function HomeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
   const { records, deleteRecord, updateRecord, isLoading } = useRecords();
   const [refreshing] = useState(false);
 
@@ -141,9 +139,7 @@ export default function HomeScreen() {
     <View style={s.container}>
       <View style={s.header}>
         <View style={s.headerLeft}>
-          <Text style={s.greeting}>
-            {user ? `Hello, ${user.username}` : "Memory Records"}
-          </Text>
+          <Text style={s.greeting}>Memory Records</Text>
           <Text style={s.title}>Your Memories</Text>
         </View>
         <Pressable style={s.addBtn} onPress={handleNewRecord} testID="add-record-btn">

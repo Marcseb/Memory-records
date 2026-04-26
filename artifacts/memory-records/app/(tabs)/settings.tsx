@@ -1,7 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
-import { router } from "expo-router";
 import React, { useState } from "react";
 import {
   Alert,
@@ -22,7 +21,7 @@ import { useColors } from "@/hooks/useColors";
 export default function SettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { user, logout } = useAuth();
+  const { resetAllData } = useAuth();
   const { knownTags, deleteTag } = useRecords();
   const { settings, updateSettings } = useSettings();
   const [vaultName, setVaultName] = useState(settings.vaultName);
@@ -58,7 +57,6 @@ export default function SettingsScreen() {
       const rawRecords = await AsyncStorage.getItem("mr_records");
       const rawTags = await AsyncStorage.getItem("mr_tags");
       const rawSettings = await AsyncStorage.getItem("mr_obsidian_settings");
-      const rawUsers = await AsyncStorage.getItem("mr_users");
 
       let recordCount = 0;
       let firstRecordDate = "—";
@@ -72,33 +70,35 @@ export default function SettingsScreen() {
 
       const tagCount = rawTags ? (() => { try { return JSON.parse(rawTags).length; } catch { return 0; } })() : 0;
       const hasSettings = !!rawSettings;
-      const hasUsers = !!rawUsers;
 
       Alert.alert(
         "Storage Diagnostic",
         `Records in storage: ${recordCount}` +
         (recordCount > 0 ? `\nOldest record date: ${firstRecordDate}` : "\n⚠️ No records found in storage") +
         `\n\nTags saved: ${tagCount}` +
-        `\nSettings present: ${hasSettings ? "yes" : "no"}` +
-        `\nUser accounts present: ${hasUsers ? "yes" : "no"}`
+        `\nSettings present: ${hasSettings ? "yes" : "no"}`
       );
     } catch (e) {
       Alert.alert("Diagnostic Error", String(e));
     }
   };
 
-  const handleLogout = () => {
-    Alert.alert("Logout", "Are you sure you want to logout?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Logout",
-        style: "destructive",
-        onPress: async () => {
-          await logout();
-          router.replace("/(auth)/login");
+  const handleResetAllData = () => {
+    Alert.alert(
+      "Reset All Data",
+      "This will permanently delete all records, tags, and settings. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reset Everything",
+          style: "destructive",
+          onPress: async () => {
+            await resetAllData();
+            Alert.alert("Done", "All data has been cleared.");
+          },
         },
-      },
-    ]);
+      ]
+    );
   };
 
   const s = StyleSheet.create({
@@ -205,14 +205,14 @@ export default function SettingsScreen() {
       color: colors.mutedForeground,
       lineHeight: 18,
     },
-    logoutBtn: {
+    destructiveRow: {
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "center",
       gap: 8,
       padding: 14,
     },
-    logoutText: {
+    destructiveText: {
       fontSize: 15,
       fontFamily: "Inter_500Medium",
       color: colors.destructive,
@@ -278,22 +278,6 @@ export default function SettingsScreen() {
           paddingBottom: Platform.OS === "web" ? 100 : insets.bottom + 80,
         }}
       >
-        {/* Account */}
-        <View style={s.section}>
-          <Text style={s.sectionTitle}>Account</Text>
-          <View style={s.card}>
-            <View style={[s.row, s.rowBorder]}>
-              <Feather name="user" size={18} color={colors.primary} />
-              <Text style={s.rowLabel}>Logged in as</Text>
-              <Text style={s.rowValue}>{user?.username ?? "—"}</Text>
-            </View>
-            <Pressable style={s.logoutBtn} onPress={handleLogout}>
-              <Feather name="log-out" size={16} color={colors.destructive} />
-              <Text style={s.logoutText}>Logout</Text>
-            </Pressable>
-          </View>
-        </View>
-
         {/* Voice language */}
         <View style={s.section}>
           <Text style={s.sectionTitle}>Voice-to-Text Language</Text>
@@ -420,6 +404,17 @@ export default function SettingsScreen() {
               <Feather name="database" size={18} color={colors.mutedForeground} />
               <Text style={[s.rowLabel, { color: colors.mutedForeground }]}>Storage diagnostic</Text>
               <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+            </Pressable>
+          </View>
+        </View>
+
+        {/* Danger zone */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Danger Zone</Text>
+          <View style={s.card}>
+            <Pressable style={s.destructiveRow} onPress={handleResetAllData}>
+              <Feather name="trash-2" size={16} color={colors.destructive} />
+              <Text style={s.destructiveText}>Reset All Data</Text>
             </Pressable>
           </View>
         </View>

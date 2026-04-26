@@ -9,26 +9,12 @@ interface User {
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  register: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  logout: () => Promise<void>;
-  resetCredentials: () => Promise<void>;
+  resetAllData: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const USERS_KEY = "mr_users";
-const SESSION_KEY = "mr_session";
-
-function hashPassword(password: string): string {
-  let hash = 0;
-  for (let i = 0; i < password.length; i++) {
-    const char = password.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash;
-  }
-  return Math.abs(hash).toString(36) + password.length.toString(36);
-}
+const IDENTITY_KEY = "mr_identity";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -37,79 +23,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const session = await AsyncStorage.getItem(SESSION_KEY);
-        if (session) {
-          setUser(JSON.parse(session));
+        const raw = await AsyncStorage.getItem(IDENTITY_KEY);
+        if (raw) {
+          setUser(JSON.parse(raw));
+        } else {
+          const identity: User = {
+            username: "local",
+            token: Date.now().toString() + Math.random().toString(36).slice(2, 9),
+          };
+          await AsyncStorage.setItem(IDENTITY_KEY, JSON.stringify(identity));
+          setUser(identity);
         }
       } catch {
-        // ignore
+        setUser({ username: "local", token: "fallback" });
       } finally {
         setIsLoading(false);
       }
     })();
   }, []);
 
-  const login = async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const raw = await AsyncStorage.getItem(USERS_KEY);
-      const users: Record<string, string> = raw ? JSON.parse(raw) : {};
-      const key = username.toLowerCase().trim();
-      const hashed = hashPassword(password);
-      if (!users[key]) {
-        return { success: false, error: "Account not found. Please register first." };
-      }
-      if (users[key] !== hashed) {
-        return { success: false, error: "Incorrect password." };
-      }
-      const token = Date.now().toString() + Math.random().toString(36).substr(2, 9);
-      const userData: User = { username: key, token };
-      await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(userData));
-      setUser(userData);
-      return { success: true };
-    } catch {
-      return { success: false, error: "Login failed. Please try again." };
-    }
-  };
-
-  const register = async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
-    try {
-      if (!username.trim() || username.trim().length < 3) {
-        return { success: false, error: "Username must be at least 3 characters." };
-      }
-      if (password.length < 6) {
-        return { success: false, error: "Password must be at least 6 characters." };
-      }
-      const raw = await AsyncStorage.getItem(USERS_KEY);
-      const users: Record<string, string> = raw ? JSON.parse(raw) : {};
-      const key = username.toLowerCase().trim();
-      if (users[key]) {
-        return { success: false, error: "Username already taken." };
-      }
-      users[key] = hashPassword(password);
-      await AsyncStorage.setItem(USERS_KEY, JSON.stringify(users));
-      const token = Date.now().toString() + Math.random().toString(36).substr(2, 9);
-      const userData: User = { username: key, token };
-      await AsyncStorage.setItem(SESSION_KEY, JSON.stringify(userData));
-      setUser(userData);
-      return { success: true };
-    } catch {
-      return { success: false, error: "Registration failed. Please try again." };
-    }
-  };
-
-  const logout = async () => {
-    await AsyncStorage.removeItem(SESSION_KEY);
-    setUser(null);
-  };
-
-  const resetCredentials = async () => {
-    await AsyncStorage.removeItem(USERS_KEY);
-    await AsyncStorage.removeItem(SESSION_KEY);
-    setUser(null);
+  const resetAllData = async () => {
+    await AsyncStorage.multiRemove([
+      IDENTITY_KEY,
+      "mr_records",
+      "mr_tags",
+      "mr_obsidian_settings",
+      "mr_session",
+      "mr_users",
+    ]);
+    const identity: User = {
+      username: "local",
+      token: Date.now().toString() + Math.random().toString(36).slice(2, 9),
+    };
+    await AsyncStorage.setItem(IDENTITY_KEY, JSON.stringify(identity));
+    setUser(identity);
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout, resetCredentials }}>
+    <AuthContext.Provider value={{ user, isLoading, resetAllData }}>
       {children}
     </AuthContext.Provider>
   );

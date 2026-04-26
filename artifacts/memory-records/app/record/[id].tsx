@@ -13,7 +13,6 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useAuth } from "@/context/AuthContext";
 import { useRecords } from "@/context/RecordsContext";
 import { useSettings } from "@/context/SettingsContext";
 import { useObsidian } from "@/hooks/useObsidian";
@@ -24,7 +23,6 @@ export default function RecordDetailScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { records, updateRecord, deleteRecord } = useRecords();
-  const { user } = useAuth();
   const { settings } = useSettings();
   const { saveToObsidian } = useObsidian();
   const [saving, setSaving] = useState(false);

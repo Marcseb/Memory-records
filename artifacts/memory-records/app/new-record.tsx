@@ -19,7 +19,6 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
-import { useAuth } from "@/context/AuthContext";
 import { MemoryRecord, useRecords } from "@/context/RecordsContext";
 import { useSettings } from "@/context/SettingsContext";
 import { useObsidian } from "@/hooks/useObsidian";
@@ -82,7 +81,6 @@ function normalizeTag(raw: string): string {
 export default function NewRecordScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
   const { addRecord, knownTags, addTag } = useRecords();
   const { settings } = useSettings();
   const { saveToObsidian } = useObsidian();
@@ -250,8 +248,8 @@ export default function NewRecordScreen() {
 
     await addRecord(record);
 
-    if (settings.configured && user) {
-      const result = await saveToObsidian(record, user.username);
+    if (settings.configured) {
+      const result = await saveToObsidian(record, "local");
       if (!result.ok && result.reason === "open_failed") {
         Alert.alert(
           "Cannot Open Obsidian",
