@@ -13,6 +13,7 @@ export interface MemoryRecord {
   savedToObsidian: boolean;
   createdAt: number;
   filename?: string;
+  editCount?: number;
 }
 
 interface RecordsContextType {

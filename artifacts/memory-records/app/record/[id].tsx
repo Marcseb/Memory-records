@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   Alert,
   Platform,
@@ -10,6 +10,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -26,6 +27,9 @@ export default function RecordDetailScreen() {
   const { settings } = useSettings();
   const { saveToObsidian } = useObsidian();
   const [saving, setSaving] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedNote, setEditedNote] = useState("");
+  const editInputRef = useRef<TextInput>(null);
 
   const record = records.find((r) => r.id === id);
 
@@ -37,6 +41,58 @@ export default function RecordDetailScreen() {
     );
   }
 
+  const handleStartEdit = () => {
+    setEditedNote(record.note ?? "");
+    setIsEditing(true);
+    setTimeout(() => editInputRef.current?.focus(), 100);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditedNote("");
+  };
+
+  const handleSaveEdit = async () => {
+    const trimmed = editedNote.trim();
+    if (!trimmed) {
+      Alert.alert("Empty Note", "Note cannot be empty.");
+      return;
+    }
+    if (trimmed === record.note) {
+      setIsEditing(false);
+      return;
+    }
+    if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+    const newEditCount = (record.editCount ?? 0) + 1;
+    const updatedRecord = { ...record, note: trimmed, editCount: newEditCount };
+
+    await updateRecord(record.id, { note: trimmed, editCount: newEditCount });
+    setIsEditing(false);
+    setEditedNote("");
+
+    if (settings.configured) {
+      setSaving(true);
+      const result = await saveToObsidian(updatedRecord);
+      if (result.ok) {
+        await updateRecord(record.id, { savedToObsidian: true, filename: record.filename ?? result.filename });
+        if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert(
+          "Saved & Sent",
+          `Note updated locally and sent to Obsidian as version v${newEditCount + 1}.`
+        );
+      } else if (result.reason === "open_failed") {
+        Alert.alert(
+          "Saved Locally",
+          "Note updated in the app. Could not open Obsidian automatically — tap \"Save to Obsidian\" to retry."
+        );
+      }
+      setSaving(false);
+    } else {
+      Alert.alert("Saved", "Note updated.");
+    }
+  };
+
   const handleSaveToObsidian = async () => {
     if (!settings.configured) {
       Alert.alert("Not Configured", "Set your Obsidian vault name in Settings first.");
@@ -44,13 +100,17 @@ export default function RecordDetailScreen() {
     }
     setSaving(true);
     if (Platform.OS !== "web") await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const result = await saveToObsidian(record, user?.username ?? "user");
+    const result = await saveToObsidian(record);
     if (result.ok) {
-      await updateRecord(record.id, { savedToObsidian: true });
+      await updateRecord(record.id, {
+        savedToObsidian: true,
+        filename: record.filename ?? result.filename,
+      });
       if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const version = (record.editCount ?? 0) > 0 ? ` (v${(record.editCount ?? 0) + 1})` : "";
       Alert.alert(
         "Sent to Obsidian ✓",
-        "Obsidian has been opened. Switch back to Obsidian to see the new note in your vault."
+        `Obsidian has been opened. Switch back to Obsidian to see the note${version} in your vault.`
       );
     } else if (result.reason === "not_configured") {
       Alert.alert("Not Configured", "Go to Settings and enter your Obsidian vault name first.");
@@ -110,6 +170,12 @@ export default function RecordDetailScreen() {
       fontFamily: "Inter_600SemiBold",
       color: colors.foreground,
     },
+    editingTitle: {
+      flex: 1,
+      fontSize: 15,
+      fontFamily: "Inter_500Medium",
+      color: colors.accent,
+    },
     continueBtn: {
       flexDirection: "row",
       alignItems: "center",
@@ -125,6 +191,32 @@ export default function RecordDetailScreen() {
       fontSize: 13,
       fontFamily: "Inter_600SemiBold",
       color: colors.primary,
+    },
+    cancelBtn: {
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    cancelBtnText: {
+      fontSize: 13,
+      fontFamily: "Inter_500Medium",
+      color: colors.mutedForeground,
+    },
+    saveEditBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: 16,
+      backgroundColor: colors.primary,
+    },
+    saveEditBtnText: {
+      fontSize: 13,
+      fontFamily: "Inter_600SemiBold",
+      color: colors.primaryForeground,
     },
     deleteBtn: { padding: 4 },
     scroll: { flex: 1 },
@@ -152,6 +244,11 @@ export default function RecordDetailScreen() {
       flex: 1,
     },
     noteSection: { gap: 8 },
+    noteSectionHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
     noteSectionLabel: {
       fontSize: 12,
       fontFamily: "Inter_600SemiBold",
@@ -159,11 +256,76 @@ export default function RecordDetailScreen() {
       textTransform: "uppercase",
       letterSpacing: 0.8,
     },
+    editNoteBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+    },
+    editNoteBtnText: {
+      fontSize: 12,
+      fontFamily: "Inter_500Medium",
+      color: colors.primary,
+    },
     noteText: {
       fontSize: 16,
       fontFamily: "Inter_400Regular",
       color: colors.foreground,
       lineHeight: 24,
+    },
+    noteInput: {
+      fontSize: 16,
+      fontFamily: "Inter_400Regular",
+      color: colors.foreground,
+      lineHeight: 24,
+      borderWidth: 1.5,
+      borderColor: colors.primary,
+      borderRadius: colors.radius,
+      padding: 12,
+      minHeight: 140,
+      textAlignVertical: "top",
+      backgroundColor: colors.card,
+    },
+    editActions: {
+      flexDirection: "row",
+      gap: 10,
+      justifyContent: "flex-end",
+    },
+    editCancelInline: {
+      flex: 1,
+      alignItems: "center",
+      paddingVertical: 12,
+      borderRadius: colors.radius,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    editCancelInlineText: {
+      fontSize: 14,
+      fontFamily: "Inter_500Medium",
+      color: colors.mutedForeground,
+    },
+    editSaveInline: {
+      flex: 2,
+      alignItems: "center",
+      paddingVertical: 12,
+      borderRadius: colors.radius,
+      backgroundColor: colors.primary,
+    },
+    editSaveInlineText: {
+      fontSize: 14,
+      fontFamily: "Inter_600SemiBold",
+      color: colors.primaryForeground,
+    },
+    versionBadge: {
+      alignSelf: "flex-start",
+      backgroundColor: colors.accent + "22",
+      borderRadius: 8,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+    },
+    versionBadgeText: {
+      fontSize: 11,
+      fontFamily: "Inter_600SemiBold",
+      color: colors.accent,
     },
     obsidianBtn: {
       flexDirection: "row",
@@ -193,20 +355,37 @@ export default function RecordDetailScreen() {
     },
   });
 
+  const editCount = record.editCount ?? 0;
+
   return (
     <View style={s.container}>
       <View style={s.header}>
-        <Pressable onPress={() => router.back()}>
-          <Feather name="arrow-left" size={22} color={colors.foreground} />
+        <Pressable onPress={isEditing ? handleCancelEdit : () => router.back()}>
+          <Feather name={isEditing ? "x" : "arrow-left"} size={22} color={isEditing ? colors.mutedForeground : colors.foreground} />
         </Pressable>
-        <Text style={s.headerTitle}>{record.date}</Text>
-        <Pressable style={s.continueBtn} onPress={handleContinue}>
-          <Feather name="file-plus" size={14} color={colors.primary} />
-          <Text style={s.continueBtnText}>New note</Text>
-        </Pressable>
-        <Pressable style={s.deleteBtn} onPress={handleDelete}>
-          <Feather name="trash-2" size={20} color={colors.destructive} />
-        </Pressable>
+
+        {isEditing ? (
+          <Text style={s.editingTitle}>Editing note…</Text>
+        ) : (
+          <Text style={s.headerTitle}>{record.date}</Text>
+        )}
+
+        {isEditing ? (
+          <Pressable style={s.saveEditBtn} onPress={handleSaveEdit} disabled={saving}>
+            <Feather name="check" size={14} color={colors.primaryForeground} />
+            <Text style={s.saveEditBtnText}>{saving ? "Saving…" : "Save"}</Text>
+          </Pressable>
+        ) : (
+          <>
+            <Pressable style={s.continueBtn} onPress={handleContinue}>
+              <Feather name="file-plus" size={14} color={colors.primary} />
+              <Text style={s.continueBtnText}>New note</Text>
+            </Pressable>
+            <Pressable style={s.deleteBtn} onPress={handleDelete}>
+              <Feather name="trash-2" size={20} color={colors.destructive} />
+            </Pressable>
+          </>
+        )}
       </View>
 
       <ScrollView style={s.scroll} contentContainerStyle={{ paddingBottom: Platform.OS === "web" ? 80 : insets.bottom + 40 }}>
@@ -218,6 +397,12 @@ export default function RecordDetailScreen() {
           {record.savedToObsidian && (
             <View style={s.badge}>
               <Text style={s.badgeText}>Saved to Obsidian</Text>
+            </View>
+          )}
+
+          {editCount > 0 && (
+            <View style={s.versionBadge}>
+              <Text style={s.versionBadgeText}>Edited · v{editCount + 1}</Text>
             </View>
           )}
 
@@ -256,24 +441,61 @@ export default function RecordDetailScreen() {
           </View>
 
           <View style={s.noteSection}>
-            <Text style={s.noteSectionLabel}>Note</Text>
-            <Text style={s.noteText}>{record.note || "No note added."}</Text>
+            <View style={s.noteSectionHeader}>
+              <Text style={s.noteSectionLabel}>Note</Text>
+              {!isEditing && (
+                <Pressable style={s.editNoteBtn} onPress={handleStartEdit}>
+                  <Feather name="edit-2" size={13} color={colors.primary} />
+                  <Text style={s.editNoteBtnText}>Edit</Text>
+                </Pressable>
+              )}
+            </View>
+
+            {isEditing ? (
+              <>
+                <TextInput
+                  ref={editInputRef}
+                  style={s.noteInput}
+                  value={editedNote}
+                  onChangeText={setEditedNote}
+                  multiline
+                  autoFocus
+                  scrollEnabled={false}
+                  placeholder="Write your note here…"
+                  placeholderTextColor={colors.mutedForeground}
+                />
+                <View style={s.editActions}>
+                  <Pressable style={s.editCancelInline} onPress={handleCancelEdit}>
+                    <Text style={s.editCancelInlineText}>Cancel</Text>
+                  </Pressable>
+                  <Pressable style={s.editSaveInline} onPress={handleSaveEdit} disabled={saving}>
+                    <Text style={s.editSaveInlineText}>
+                      {saving ? "Saving…" : settings.configured ? "Save & Send to Obsidian" : "Save"}
+                    </Text>
+                  </Pressable>
+                </View>
+              </>
+            ) : (
+              <Text style={s.noteText}>{record.note || "No note added."}</Text>
+            )}
           </View>
 
-          <Pressable
-            style={s.obsidianBtn}
-            onPress={handleSaveToObsidian}
-            disabled={saving}
-          >
-            <Feather
-              name={record.savedToObsidian ? "check-circle" : "upload"}
-              size={18}
-              color={record.savedToObsidian ? colors.success : colors.primaryForeground}
-            />
-            <Text style={s.obsidianBtnText}>
-              {saving ? "Opening Obsidian..." : record.savedToObsidian ? "Re-send to Obsidian" : "Save to Obsidian"}
-            </Text>
-          </Pressable>
+          {!isEditing && (
+            <Pressable
+              style={s.obsidianBtn}
+              onPress={handleSaveToObsidian}
+              disabled={saving}
+            >
+              <Feather
+                name={record.savedToObsidian ? "check-circle" : "upload"}
+                size={18}
+                color={record.savedToObsidian ? colors.success : colors.primaryForeground}
+              />
+              <Text style={s.obsidianBtnText}>
+                {saving ? "Opening Obsidian…" : record.savedToObsidian ? "Re-send to Obsidian" : "Save to Obsidian"}
+              </Text>
+            </Pressable>
+          )}
         </View>
       </ScrollView>
     </View>

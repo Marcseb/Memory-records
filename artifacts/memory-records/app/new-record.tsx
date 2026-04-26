@@ -81,7 +81,7 @@ function normalizeTag(raw: string): string {
 export default function NewRecordScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { addRecord, knownTags, addTag } = useRecords();
+  const { addRecord, updateRecord, knownTags, addTag } = useRecords();
   const { settings } = useSettings();
   const { saveToObsidian } = useObsidian();
 
@@ -250,7 +250,9 @@ export default function NewRecordScreen() {
 
     if (settings.configured) {
       const result = await saveToObsidian(record);
-      if (!result.ok && result.reason === "open_failed") {
+      if (result.ok) {
+        await updateRecord(record.id, { savedToObsidian: true, filename: result.filename });
+      } else if (result.reason === "open_failed") {
         Alert.alert(
           "Cannot Open Obsidian",
           "Record saved locally. Open the record and tap \"Save to Obsidian\" when ready.\n\n" +

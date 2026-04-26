@@ -18,17 +18,35 @@ function isoToDMY(iso: string): string {
 /**
  * Build the Obsidian note filename.
  *
- * With tag:    dd-mm-yyyy_tag_NN      e.g. 24-04-2026_sports_01
- * Without tag: dd-mm-yyyy_shortid     e.g. 24-04-2026_a3f19827
+ * Original:       dd-mm-yyyy_tag_NN        e.g. 24-04-2026_sports_01
+ * After 1st edit: dd-mm-yyyy_tag_NN_v2     e.g. 24-04-2026_sports_01_v2
+ * After 2nd edit: dd-mm-yyyy_tag_NN_v3     ...
+ *
+ * If the record already has a stored base filename, versioning is anchored to it
+ * so renames caused by tag changes don't break the version chain.
  */
 function buildFilename(record: MemoryRecord, tagOrder: number): string {
-  const dmy = isoToDMY(record.date);
-  const primaryTag = record.tags?.[0];
-  if (primaryTag) {
-    const nn = String(tagOrder).padStart(2, "0");
-    return sanitizeFilename(`${dmy}_${primaryTag}_${nn}`);
+  const editCount = record.editCount ?? 0;
+
+  // Base filename: use stored original if available, otherwise compute fresh
+  let base: string;
+  if (record.filename) {
+    base = record.filename;
+  } else {
+    const dmy = isoToDMY(record.date);
+    const primaryTag = record.tags?.[0];
+    if (primaryTag) {
+      const nn = String(tagOrder).padStart(2, "0");
+      base = sanitizeFilename(`${dmy}_${primaryTag}_${nn}`);
+    } else {
+      base = sanitizeFilename(`${dmy}_${record.id.substring(0, 8)}`);
+    }
   }
-  return sanitizeFilename(`${dmy}_${record.id.substring(0, 8)}`);
+
+  if (editCount > 0) {
+    return `${base}_v${editCount + 1}`;
+  }
+  return base;
 }
 
 function formatMarkdown(record: MemoryRecord, authorName?: string): string {
@@ -45,6 +63,8 @@ function formatMarkdown(record: MemoryRecord, authorName?: string): string {
     lines.push(`**Map:** [Open in Google Maps](${mapsUrl})`);
   }
   if (authorName) lines.push(`**Recorded by:** ${authorName}`);
+  const editCount = record.editCount ?? 0;
+  if (editCount > 0) lines.push(`**Version:** v${editCount + 1}`);
   lines.push(`**Saved at:** ${new Date(record.createdAt).toISOString()}`);
   lines.push("");
   lines.push("---");
@@ -60,7 +80,7 @@ function formatMarkdown(record: MemoryRecord, authorName?: string): string {
 }
 
 export type ObsidianResult =
-  | { ok: true }
+  | { ok: true; filename: string }
   | { ok: false; reason: "not_configured" | "open_failed"; error?: unknown };
 
 export function useObsidian() {
@@ -82,8 +102,8 @@ export function useObsidian() {
       ? records.filter((r) => r.tags?.[0] === primaryTag && r.id !== record.id).length + 1
       : 1;
 
-    const content = formatMarkdown(record, settings.authorName || undefined);
     const filename = buildFilename(record, tagOrder);
+    const content = formatMarkdown(record, settings.authorName || undefined);
     const filePath = settings.folder
       ? `${settings.folder}/${filename}`
       : filename;
@@ -101,7 +121,7 @@ export function useObsidian() {
 
     try {
       await Linking.openURL(uri);
-      return { ok: true };
+      return { ok: true, filename };
     } catch (err) {
       console.warn("[Obsidian] openURL failed:", err);
       return { ok: false, reason: "open_failed", error: err };
