@@ -14,6 +14,7 @@ interface AppSettings {
   folder: string;
   configured: boolean;
   voiceLanguage: VoiceLanguage;
+  authorName: string;
 }
 
 interface SettingsContextType {
@@ -30,6 +31,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   folder: "Memory Records",
   configured: false,
   voiceLanguage: "fr-FR",
+  authorName: "",
 };
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {

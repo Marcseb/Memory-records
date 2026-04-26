@@ -26,12 +26,17 @@ export default function SettingsScreen() {
   const { settings, updateSettings } = useSettings();
   const [vaultName, setVaultName] = useState(settings.vaultName);
   const [folder, setFolder] = useState(settings.folder);
+  const [authorName, setAuthorName] = useState(settings.authorName);
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
     if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setSaving(true);
-    await updateSettings({ vaultName: vaultName.trim(), folder: folder.trim() || "Memory Records" });
+    await updateSettings({
+      vaultName: vaultName.trim(),
+      folder: folder.trim() || "Memory Records",
+      authorName: authorName.trim(),
+    });
     setSaving(false);
     Alert.alert("Saved", "Settings updated.");
   };
@@ -346,6 +351,16 @@ export default function SettingsScreen() {
         </View>
 
         <View style={[s.section, { paddingTop: 16 }]}>
+          <Text style={s.label}>Author Name</Text>
+          <TextInput
+            style={s.input}
+            value={authorName}
+            onChangeText={setAuthorName}
+            placeholder="e.g. Marie"
+            placeholderTextColor={colors.mutedForeground}
+            autoCapitalize="words"
+            autoCorrect={false}
+          />
           <Text style={s.label}>Vault Name</Text>
           <TextInput
             style={s.input}
