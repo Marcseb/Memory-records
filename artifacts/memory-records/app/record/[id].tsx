@@ -7,13 +7,13 @@ import {
   Alert,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useRecords } from "@/context/RecordsContext";
 import { useSettings } from "@/context/SettingsContext";
 import { useObsidian } from "@/hooks/useObsidian";
@@ -388,7 +388,12 @@ export default function RecordDetailScreen() {
         )}
       </View>
 
-      <ScrollView style={s.scroll} contentContainerStyle={{ paddingBottom: Platform.OS === "web" ? 80 : insets.bottom + 40 }}>
+      <KeyboardAwareScrollView
+        style={s.scroll}
+        contentContainerStyle={{ paddingBottom: Platform.OS === "web" ? 80 : insets.bottom + 40 }}
+        keyboardShouldPersistTaps="handled"
+        bottomOffset={24}
+      >
         {record.imageUri ? (
           <Image source={{ uri: record.imageUri }} style={s.photo} contentFit="cover" />
         ) : null}
@@ -497,7 +502,7 @@ export default function RecordDetailScreen() {
             </Pressable>
           )}
         </View>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }
