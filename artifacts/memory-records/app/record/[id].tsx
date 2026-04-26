@@ -31,6 +31,7 @@ export default function RecordDetailScreen() {
   const [isEditing, setIsEditing] = useState(false);
   const [editedNote, setEditedNote] = useState("");
   const [editedYear, setEditedYear] = useState<number | undefined>(undefined);
+  const [editedTags, setEditedTags] = useState<string[]>([]);
   const editInputRef = useRef<TextInput>(null);
   const currentYear = new Date().getFullYear();
 
@@ -47,6 +48,7 @@ export default function RecordDetailScreen() {
   const handleStartEdit = () => {
     setEditedNote(record.note ?? "");
     setEditedYear(record.contextYear);
+    setEditedTags(record.tags ?? []);
     setIsEditing(true);
     setTimeout(() => editInputRef.current?.focus(), 100);
   };
@@ -55,6 +57,13 @@ export default function RecordDetailScreen() {
     setIsEditing(false);
     setEditedNote("");
     setEditedYear(undefined);
+    setEditedTags([]);
+  };
+
+  // Promote a tag to position 0 (primary); others keep their relative order.
+  const handlePromoteTag = (tag: string) => {
+    if (Platform.OS !== "web") Haptics.selectionAsync();
+    setEditedTags((prev) => [tag, ...prev.filter((t) => t !== tag)]);
   };
 
   const handleSaveEdit = async () => {
@@ -64,32 +73,35 @@ export default function RecordDetailScreen() {
       return;
     }
     const yearChanged = editedYear !== record.contextYear;
-    if (trimmed === record.note && !yearChanged) {
+    const primaryTagChanged = editedTags[0] !== record.tags?.[0];
+    const tagsChanged = JSON.stringify(editedTags) !== JSON.stringify(record.tags ?? []);
+    if (trimmed === record.note && !yearChanged && !tagsChanged) {
       setIsEditing(false);
       return;
     }
     if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
+    const newTags = editedTags.length > 0 ? editedTags : undefined;
     const newEditCount = (record.editCount ?? 0) + 1;
-    const updatedRecord = { ...record, note: trimmed, contextYear: editedYear, editCount: newEditCount };
+    const updatedRecord = { ...record, note: trimmed, contextYear: editedYear, tags: newTags, editCount: newEditCount };
 
-    await updateRecord(record.id, { note: trimmed, contextYear: editedYear, editCount: newEditCount });
+    await updateRecord(record.id, { note: trimmed, contextYear: editedYear, tags: newTags, editCount: newEditCount });
     setIsEditing(false);
     setEditedNote("");
+    setEditedTags([]);
 
     if (settings.configured) {
       setSaving(true);
-      // When contextYear changed the stored filename base is stale (it was built
-      // without the year, or with the old year). Clear it so buildFilename
-      // recomputes the base from scratch including the new year.
-      const recordForObsidian = yearChanged
+      // When contextYear or the primary tag changed, the stored filename base
+      // is stale — clear it so buildFilename recomputes from scratch.
+      const needsRebuild = yearChanged || primaryTagChanged;
+      const recordForObsidian = needsRebuild
         ? { ...updatedRecord, filename: undefined }
         : updatedRecord;
       const result = await saveToObsidian(recordForObsidian);
       if (result.ok) {
-        // If the year changed, derive the new base by stripping the version
-        // suffix (_v2, _v3 …) so future edits anchor to the correct base.
-        const newFilenameBase = yearChanged
+        // Derive the new base by stripping the version suffix (_v2, _v3 …).
+        const newFilenameBase = needsRebuild
           ? result.filename.replace(/_v\d+$/, "")
           : (record.filename ?? result.filename);
         await updateRecord(record.id, { savedToObsidian: true, filename: newFilenameBase });
@@ -330,6 +342,80 @@ export default function RecordDetailScreen() {
       fontFamily: "Inter_600SemiBold",
       color: colors.primaryForeground,
     },
+    tagReorderBox: {
+      backgroundColor: colors.surface,
+      borderRadius: colors.radius,
+      padding: 12,
+      gap: 10,
+    },
+    tagReorderHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    tagReorderLabel: {
+      fontSize: 12,
+      fontFamily: "Inter_600SemiBold",
+      color: colors.mutedForeground,
+      textTransform: "uppercase",
+      letterSpacing: 0.6,
+    },
+    tagReorderHint: {
+      fontSize: 11,
+      fontFamily: "Inter_400Regular",
+      color: colors.mutedForeground,
+      flex: 1,
+      textAlign: "right",
+      fontStyle: "italic",
+    },
+    tagReorderRow: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    tagReorderChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+      borderRadius: 16,
+      backgroundColor: colors.card,
+      borderWidth: 1.5,
+      borderColor: colors.border,
+    },
+    tagReorderChipPrimary: {
+      backgroundColor: colors.primary + "14",
+      borderColor: colors.primary,
+    },
+    tagRankBadge: {
+      width: 16,
+      height: 16,
+      borderRadius: 8,
+      backgroundColor: colors.border,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    tagRankBadgePrimary: {
+      backgroundColor: colors.primary,
+    },
+    tagRankBadgeText: {
+      fontSize: 10,
+      fontFamily: "Inter_700Bold",
+      color: colors.mutedForeground,
+    },
+    tagRankBadgeTextPrimary: {
+      color: colors.primaryForeground,
+    },
+    tagReorderChipText: {
+      fontSize: 13,
+      fontFamily: "Inter_500Medium",
+      color: colors.mutedForeground,
+    },
+    tagReorderChipTextPrimary: {
+      color: colors.primary,
+      fontFamily: "Inter_600SemiBold",
+    },
     yearStepperRow: {
       flexDirection: "row",
       alignItems: "center",
@@ -532,6 +618,42 @@ export default function RecordDetailScreen() {
                   placeholder="Write your note here…"
                   placeholderTextColor={colors.mutedForeground}
                 />
+
+                {/* Tag rank reorder — only shown when the record has tags */}
+                {editedTags.length > 0 && (
+                  <View style={s.tagReorderBox}>
+                    <View style={s.tagReorderHeader}>
+                      <Feather name="folder" size={13} color={colors.mutedForeground} />
+                      <Text style={s.tagReorderLabel}>Folder tag</Text>
+                      <Text style={s.tagReorderHint}>Tap any tag to make it primary</Text>
+                    </View>
+                    <View style={s.tagReorderRow}>
+                      {editedTags.map((tag, index) => {
+                        const isPrimary = index === 0;
+                        return (
+                          <Pressable
+                            key={tag}
+                            style={[s.tagReorderChip, isPrimary && s.tagReorderChipPrimary]}
+                            onPress={() => handlePromoteTag(tag)}
+                            disabled={isPrimary}
+                          >
+                            <View style={[s.tagRankBadge, isPrimary && s.tagRankBadgePrimary]}>
+                              <Text style={[s.tagRankBadgeText, isPrimary && s.tagRankBadgeTextPrimary]}>
+                                {index + 1}
+                              </Text>
+                            </View>
+                            <Text style={[s.tagReorderChipText, isPrimary && s.tagReorderChipTextPrimary]}>
+                              #{tag}
+                            </Text>
+                            {isPrimary && (
+                              <Feather name="folder" size={12} color={colors.primary} />
+                            )}
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                  </View>
+                )}
 
                 {/* Memory year stepper */}
                 <View style={s.yearStepperRow}>
