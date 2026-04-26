@@ -249,7 +249,7 @@ export default function NewRecordScreen() {
     await addRecord(record);
 
     if (settings.configured) {
-      const result = await saveToObsidian(record, "local");
+      const result = await saveToObsidian(record);
       if (!result.ok && result.reason === "open_failed") {
         Alert.alert(
           "Cannot Open Obsidian",

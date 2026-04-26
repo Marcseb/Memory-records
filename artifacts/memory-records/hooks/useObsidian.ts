@@ -31,7 +31,7 @@ function buildFilename(record: MemoryRecord, tagOrder: number): string {
   return sanitizeFilename(`${dmy}_${record.id.substring(0, 8)}`);
 }
 
-function formatMarkdown(record: MemoryRecord, username: string): string {
+function formatMarkdown(record: MemoryRecord): string {
   const lines: string[] = [];
 
   lines.push(`**Date:** ${record.date}`);
@@ -44,7 +44,6 @@ function formatMarkdown(record: MemoryRecord, username: string): string {
     const mapsUrl = `https://maps.google.com/?q=${record.lat.toFixed(5)},${record.lng.toFixed(5)}`;
     lines.push(`**Map:** [Open in Google Maps](${mapsUrl})`);
   }
-  lines.push(`**Recorded by:** ${username}`);
   lines.push(`**Saved at:** ${new Date(record.createdAt).toISOString()}`);
   lines.push("");
   lines.push("---");
@@ -68,8 +67,7 @@ export function useObsidian() {
   const { records } = useRecords();
 
   const saveToObsidian = async (
-    record: MemoryRecord,
-    username: string
+    record: MemoryRecord
   ): Promise<ObsidianResult> => {
     if (!settings.vaultName.trim()) {
       return { ok: false, reason: "not_configured" };
@@ -83,7 +81,7 @@ export function useObsidian() {
       ? records.filter((r) => r.tags?.[0] === primaryTag && r.id !== record.id).length + 1
       : 1;
 
-    const content = formatMarkdown(record, username);
+    const content = formatMarkdown(record);
     const filename = buildFilename(record, tagOrder);
     const filePath = settings.folder
       ? `${settings.folder}/${filename}`
