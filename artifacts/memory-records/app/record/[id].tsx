@@ -131,7 +131,7 @@ export default function RecordDetailScreen() {
     if (Platform.OS !== "web") await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     await AsyncStorage.setItem(
       "mr_temp_context",
-      JSON.stringify({ note: record.note ?? "", tags: record.tags ?? [] })
+      JSON.stringify({ note: record.note ?? "", tags: record.tags ?? [], contextYear: record.contextYear })
     );
     router.push({ pathname: "/new-record", params: { fromContext: "1" } });
   };

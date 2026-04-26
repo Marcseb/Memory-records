@@ -117,13 +117,15 @@ export default function NewRecordScreen() {
         const raw = await AsyncStorage.getItem("mr_temp_context");
         await AsyncStorage.removeItem("mr_temp_context");
         if (!raw) return;
-        const { note: ctxNote, tags: ctxTags } = JSON.parse(raw) as {
+        const { note: ctxNote, tags: ctxTags, contextYear: ctxYear } = JSON.parse(raw) as {
           note: string;
           tags: string[];
+          contextYear?: number;
         };
         setContextNote(ctxNote);
         setMode("note");
         if (ctxTags.length > 0) setSelectedTags(ctxTags);
+        if (ctxYear !== undefined) setContextYear(ctxYear);
         setInterviewEnabled(true);
         await startInterview(ctxTags, ctxNote);
       } catch {
