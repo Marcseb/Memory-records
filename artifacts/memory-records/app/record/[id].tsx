@@ -30,7 +30,9 @@ export default function RecordDetailScreen() {
   const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editedNote, setEditedNote] = useState("");
+  const [editedYear, setEditedYear] = useState<number | undefined>(undefined);
   const editInputRef = useRef<TextInput>(null);
+  const currentYear = new Date().getFullYear();
 
   const record = records.find((r) => r.id === id);
 
@@ -44,6 +46,7 @@ export default function RecordDetailScreen() {
 
   const handleStartEdit = () => {
     setEditedNote(record.note ?? "");
+    setEditedYear(record.contextYear);
     setIsEditing(true);
     setTimeout(() => editInputRef.current?.focus(), 100);
   };
@@ -51,6 +54,7 @@ export default function RecordDetailScreen() {
   const handleCancelEdit = () => {
     setIsEditing(false);
     setEditedNote("");
+    setEditedYear(undefined);
   };
 
   const handleSaveEdit = async () => {
@@ -59,16 +63,17 @@ export default function RecordDetailScreen() {
       Alert.alert("Empty Note", "Note cannot be empty.");
       return;
     }
-    if (trimmed === record.note) {
+    const yearChanged = editedYear !== record.contextYear;
+    if (trimmed === record.note && !yearChanged) {
       setIsEditing(false);
       return;
     }
     if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     const newEditCount = (record.editCount ?? 0) + 1;
-    const updatedRecord = { ...record, note: trimmed, editCount: newEditCount };
+    const updatedRecord = { ...record, note: trimmed, contextYear: editedYear, editCount: newEditCount };
 
-    await updateRecord(record.id, { note: trimmed, editCount: newEditCount });
+    await updateRecord(record.id, { note: trimmed, contextYear: editedYear, editCount: newEditCount });
     setIsEditing(false);
     setEditedNote("");
 
@@ -314,6 +319,47 @@ export default function RecordDetailScreen() {
       fontFamily: "Inter_600SemiBold",
       color: colors.primaryForeground,
     },
+    yearStepperRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      backgroundColor: colors.surface,
+      borderRadius: colors.radius,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    yearStepperLabel: {
+      fontSize: 13,
+      fontFamily: "Inter_400Regular",
+      color: colors.mutedForeground,
+      flex: 1,
+    },
+    yearStepperControls: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+    },
+    yearStepperBtn: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    yearStepperValue: {
+      fontSize: 15,
+      fontFamily: "Inter_600SemiBold",
+      color: colors.foreground,
+      minWidth: 46,
+      textAlign: "center",
+    },
+    yearStepperValueEmpty: {
+      color: colors.mutedForeground,
+      fontFamily: "Inter_400Regular",
+    },
     versionBadge: {
       alignSelf: "flex-start",
       backgroundColor: colors.accent + "22",
@@ -475,6 +521,47 @@ export default function RecordDetailScreen() {
                   placeholder="Write your note here…"
                   placeholderTextColor={colors.mutedForeground}
                 />
+
+                {/* Memory year stepper */}
+                <View style={s.yearStepperRow}>
+                  <Feather name="clock" size={13} color={colors.mutedForeground} style={{ marginTop: 1 }} />
+                  <Text style={s.yearStepperLabel}>Memory year</Text>
+                  <View style={s.yearStepperControls}>
+                    <Pressable
+                      style={s.yearStepperBtn}
+                      onPress={() => {
+                        if (Platform.OS !== "web") Haptics.selectionAsync();
+                        setEditedYear((y) => y !== undefined ? Math.max(1900, y - 1) : currentYear - 1);
+                      }}
+                    >
+                      <Feather name="minus" size={14} color={colors.foreground} />
+                    </Pressable>
+                    <Text style={[s.yearStepperValue, editedYear === undefined && s.yearStepperValueEmpty]}>
+                      {editedYear !== undefined ? String(editedYear) : "—"}
+                    </Text>
+                    <Pressable
+                      style={s.yearStepperBtn}
+                      onPress={() => {
+                        if (Platform.OS !== "web") Haptics.selectionAsync();
+                        setEditedYear((y) => y !== undefined ? Math.min(currentYear, y + 1) : currentYear);
+                      }}
+                    >
+                      <Feather name="plus" size={14} color={colors.foreground} />
+                    </Pressable>
+                  </View>
+                  {editedYear !== undefined && (
+                    <Pressable
+                      onPress={() => {
+                        if (Platform.OS !== "web") Haptics.selectionAsync();
+                        setEditedYear(undefined);
+                      }}
+                      hitSlop={8}
+                    >
+                      <Feather name="x" size={14} color={colors.mutedForeground} />
+                    </Pressable>
+                  )}
+                </View>
+
                 <View style={s.editActions}>
                   <Pressable style={s.editCancelInline} onPress={handleCancelEdit}>
                     <Text style={s.editCancelInlineText}>Cancel</Text>
