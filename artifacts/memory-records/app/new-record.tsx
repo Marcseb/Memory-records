@@ -2,6 +2,7 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { Image } from "expo-image";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -86,10 +87,8 @@ export default function NewRecordScreen() {
   const { saveToObsidian } = useObsidian();
 
   // Context passed from an existing record's "New note" button
-  const { contextNote, contextTags } = useLocalSearchParams<{
-    contextNote?: string;
-    contextTags?: string;
-  }>();
+  const { fromContext } = useLocalSearchParams<{ fromContext?: string }>();
+  const [contextNote, setContextNote] = useState<string | undefined>(undefined);
 
   const [mode, setMode] = useState<"photo" | "note" | null>(null);
   const [photo, setPhoto] = useState<PhotoData | null>(null);
@@ -110,14 +109,25 @@ export default function NewRecordScreen() {
 
   // Auto-initialize when arriving from an existing record's "New note" button
   useEffect(() => {
-    if (!contextNote) return;
-    const parsedTags: string[] = (() => {
-      try { return JSON.parse(contextTags ?? "[]"); } catch { return []; }
+    if (fromContext !== "1") return;
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem("mr_temp_context");
+        await AsyncStorage.removeItem("mr_temp_context");
+        if (!raw) return;
+        const { note: ctxNote, tags: ctxTags } = JSON.parse(raw) as {
+          note: string;
+          tags: string[];
+        };
+        setContextNote(ctxNote);
+        setMode("note");
+        if (ctxTags.length > 0) setSelectedTags(ctxTags);
+        setInterviewEnabled(true);
+        await startInterview(ctxTags, ctxNote);
+      } catch {
+        // if anything fails, just open a blank note screen
+      }
     })();
-    setMode("note");
-    if (parsedTags.length > 0) setSelectedTags(parsedTags);
-    setInterviewEnabled(true);
-    startInterview(parsedTags, contextNote);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // run once on mount only
 

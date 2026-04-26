@@ -12,7 +12,7 @@ interface UseInterviewResult {
   isLoading: boolean;
   error: string | null;
   history: ChatMessage[];
-  startInterview: (tags?: string[]) => Promise<void>;
+  startInterview: (tags?: string[], seedContext?: string) => Promise<void>;
   nextQuestion: (userNote: string, tags?: string[]) => Promise<void>;
   reset: () => void;
 }
@@ -43,10 +43,14 @@ export function useInterview(): UseInterviewResult {
     setError(null);
     setQuestion(null);
 
+    const truncated = seedContext && seedContext.length > 600
+      ? seedContext.slice(0, 600) + "…"
+      : seedContext;
+
     const seed: ChatMessage = {
       role: "user",
-      content: seedContext
-        ? `I have a previous memory note I'd like to explore further:\n\n"${seedContext}"\n\nPlease ask me a focused follow-up question to help me recall and share more details about this memory.`
+      content: truncated
+        ? `I have a previous memory note I'd like to explore further:\n\n"${truncated}"\n\nPlease ask me a focused follow-up question to help me recall and share more details about this memory.`
         : "Please start the interview with your first question.",
     };
 

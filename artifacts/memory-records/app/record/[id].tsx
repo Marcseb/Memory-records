@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRecords } from "@/context/RecordsContext";
 import { useSettings } from "@/context/SettingsContext";
 import { useObsidian } from "@/hooks/useObsidian";
@@ -128,13 +129,11 @@ export default function RecordDetailScreen() {
 
   const handleContinue = async () => {
     if (Platform.OS !== "web") await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push({
-      pathname: "/new-record",
-      params: {
-        contextNote: record.note ?? "",
-        contextTags: JSON.stringify(record.tags ?? []),
-      },
-    });
+    await AsyncStorage.setItem(
+      "mr_temp_context",
+      JSON.stringify({ note: record.note ?? "", tags: record.tags ?? [] })
+    );
+    router.push({ pathname: "/new-record", params: { fromContext: "1" } });
   };
 
   const handleDelete = () => {
