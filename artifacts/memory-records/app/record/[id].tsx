@@ -79,9 +79,20 @@ export default function RecordDetailScreen() {
 
     if (settings.configured) {
       setSaving(true);
-      const result = await saveToObsidian(updatedRecord);
+      // When contextYear changed the stored filename base is stale (it was built
+      // without the year, or with the old year). Clear it so buildFilename
+      // recomputes the base from scratch including the new year.
+      const recordForObsidian = yearChanged
+        ? { ...updatedRecord, filename: undefined }
+        : updatedRecord;
+      const result = await saveToObsidian(recordForObsidian);
       if (result.ok) {
-        await updateRecord(record.id, { savedToObsidian: true, filename: record.filename ?? result.filename });
+        // If the year changed, derive the new base by stripping the version
+        // suffix (_v2, _v3 …) so future edits anchor to the correct base.
+        const newFilenameBase = yearChanged
+          ? result.filename.replace(/_v\d+$/, "")
+          : (record.filename ?? result.filename);
+        await updateRecord(record.id, { savedToObsidian: true, filename: newFilenameBase });
         if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Alert.alert(
           "Saved & Sent",
