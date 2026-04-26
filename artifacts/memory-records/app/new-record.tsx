@@ -94,7 +94,9 @@ export default function NewRecordScreen() {
   const [photo, setPhoto] = useState<PhotoData | null>(null);
   const [note, setNote] = useState("");
   const [manualDate, setManualDate] = useState(todayString());
+  const [contextYear, setContextYear] = useState<number | undefined>(undefined);
   const [isSaving, setIsSaving] = useState(false);
+  const currentYear = new Date().getFullYear();
   const [savedBanner, setSavedBanner] = useState(false);
 
   // Tag state — ordered array; index 0 is the primary tag (drives filename)
@@ -228,6 +230,7 @@ export default function NewRecordScreen() {
     setPhoto(null);
     setNote("");
     setManualDate(todayString());
+    setContextYear(undefined);
     setSelectedTags([]);
     setShowNewTagInput(false);
     setNewTagDraft("");
@@ -249,6 +252,7 @@ export default function NewRecordScreen() {
       tags: selectedTags.length > 0 ? selectedTags : undefined,
       note: note.trim(),
       date: photo?.date ?? manualDate,
+      contextYear: contextYear,
       location: undefined,
       lat: photo?.lat,
       lng: photo?.lng,
@@ -428,6 +432,47 @@ export default function NewRecordScreen() {
       fontSize: 15,
       fontFamily: "Inter_400Regular",
       color: colors.foreground,
+    },
+    yearStepperRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      backgroundColor: colors.surface,
+      borderRadius: colors.radius,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    yearStepperLabel: {
+      fontSize: 13,
+      fontFamily: "Inter_400Regular",
+      color: colors.mutedForeground,
+      flex: 1,
+    },
+    yearStepperControls: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+    },
+    yearStepperBtn: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    yearStepperValue: {
+      fontSize: 15,
+      fontFamily: "Inter_600SemiBold",
+      color: colors.foreground,
+      minWidth: 46,
+      textAlign: "center",
+    },
+    yearStepperValueEmpty: {
+      color: colors.mutedForeground,
+      fontFamily: "Inter_400Regular",
     },
     // Tag section
     tagRow: {
@@ -909,6 +954,46 @@ export default function NewRecordScreen() {
                 />
               </View>
             )}
+
+            {/* Memory year stepper */}
+            <View style={s.yearStepperRow}>
+              <Feather name="clock" size={13} color={colors.mutedForeground} style={{ marginTop: 1 }} />
+              <Text style={s.yearStepperLabel}>Memory year</Text>
+              <View style={s.yearStepperControls}>
+                <Pressable
+                  style={s.yearStepperBtn}
+                  onPress={() => {
+                    if (Platform.OS !== "web") Haptics.selectionAsync();
+                    setContextYear((y) => y !== undefined ? Math.max(1900, y - 1) : currentYear - 1);
+                  }}
+                >
+                  <Feather name="minus" size={14} color={colors.foreground} />
+                </Pressable>
+                <Text style={[s.yearStepperValue, !contextYear && s.yearStepperValueEmpty]}>
+                  {contextYear ? String(contextYear) : "—"}
+                </Text>
+                <Pressable
+                  style={s.yearStepperBtn}
+                  onPress={() => {
+                    if (Platform.OS !== "web") Haptics.selectionAsync();
+                    setContextYear((y) => y !== undefined ? Math.min(currentYear, y + 1) : currentYear);
+                  }}
+                >
+                  <Feather name="plus" size={14} color={colors.foreground} />
+                </Pressable>
+              </View>
+              {contextYear !== undefined && (
+                <Pressable
+                  onPress={() => {
+                    if (Platform.OS !== "web") Haptics.selectionAsync();
+                    setContextYear(undefined);
+                  }}
+                  hitSlop={8}
+                >
+                  <Feather name="x" size={14} color={colors.mutedForeground} />
+                </Pressable>
+              )}
+            </View>
           </View>
 
           {/* Tag section */}

@@ -53,6 +53,9 @@ function formatMarkdown(record: MemoryRecord, authorName?: string): string {
   const lines: string[] = [];
 
   lines.push(`**Date:** ${record.date}`);
+  if (record.contextYear !== undefined) {
+    lines.push(`**Memory year:** ${record.contextYear}`);
+  }
   if (record.tags && record.tags.length > 0) {
     lines.push(`**Tags:** ${record.tags.map((t) => `#${t}`).join("  ")}`);
   }

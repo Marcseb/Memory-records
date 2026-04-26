@@ -159,7 +159,14 @@ export function RecordCard({ record, onPress, onDelete, onAddPhoto }: Props) {
         </Pressable>
       )}
       <View style={s.content}>
-        <Text style={s.date}>{record.date}</Text>
+        <Text style={s.date}>
+          {record.date}
+          {record.contextYear !== undefined ? (
+            <Text style={{ fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
+              {"  ·  "}{record.contextYear}
+            </Text>
+          ) : null}
+        </Text>
         <Text style={s.note} numberOfLines={2}>{notePreview}</Text>
         <View style={s.meta}>
           {record.tags && record.tags.length > 0

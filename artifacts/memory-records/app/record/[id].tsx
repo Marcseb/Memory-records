@@ -416,6 +416,13 @@ export default function RecordDetailScreen() {
               <Text style={s.metaLabel}>Date</Text>
               <Text style={s.metaValue}>{record.date}</Text>
             </View>
+            {record.contextYear !== undefined && (
+              <View style={s.metaRow}>
+                <Feather name="clock" size={14} color={colors.primary} />
+                <Text style={s.metaLabel}>Memory year</Text>
+                <Text style={s.metaValue}>{record.contextYear}</Text>
+              </View>
+            )}
             {record.tags && record.tags.length > 0 && (
               <View style={s.metaRow}>
                 <Feather name="tag" size={14} color={colors.primary} />

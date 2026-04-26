@@ -7,6 +7,7 @@ export interface MemoryRecord {
   tags?: string[];
   note: string;
   date: string;
+  contextYear?: number;
   location?: string;
   lat?: number;
   lng?: number;
