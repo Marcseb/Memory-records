@@ -37,9 +37,11 @@ function buildFilename(record: MemoryRecord, tagOrder: number): string {
     const primaryTag = record.tags?.[0];
     if (primaryTag) {
       const nn = String(tagOrder).padStart(2, "0");
-      base = sanitizeFilename(`${dmy}_${primaryTag}_${nn}`);
+      const yearPart = record.contextYear !== undefined ? `_${record.contextYear}` : "";
+      base = sanitizeFilename(`${dmy}_${primaryTag}${yearPart}_${nn}`);
     } else {
-      base = sanitizeFilename(`${dmy}_${record.id.substring(0, 8)}`);
+      const yearPart = record.contextYear !== undefined ? `_${record.contextYear}` : "";
+      base = sanitizeFilename(`${dmy}${yearPart}_${record.id.substring(0, 8)}`);
     }
   }
 
