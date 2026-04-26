@@ -38,14 +38,16 @@ export function useInterview(): UseInterviewResult {
   // Full conversation history: alternating user / assistant, starting with user.
   const [history, setHistory] = useState<ChatMessage[]>([]);
 
-  const startInterview = useCallback(async (tags: string[] = []) => {
+  const startInterview = useCallback(async (tags: string[] = [], seedContext?: string) => {
     setIsLoading(true);
     setError(null);
     setQuestion(null);
 
     const seed: ChatMessage = {
       role: "user",
-      content: "Please start the interview with your first question.",
+      content: seedContext
+        ? `I have a previous memory note I'd like to explore further:\n\n"${seedContext}"\n\nPlease ask me a focused follow-up question to help me recall and share more details about this memory.`
+        : "Please start the interview with your first question.",
     };
 
     try {

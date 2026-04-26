@@ -68,6 +68,17 @@ export default function RecordDetailScreen() {
     setSaving(false);
   };
 
+  const handleContinue = async () => {
+    if (Platform.OS !== "web") await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push({
+      pathname: "/new-record",
+      params: {
+        contextNote: record.note ?? "",
+        contextTags: JSON.stringify(record.tags ?? []),
+      },
+    });
+  };
+
   const handleDelete = () => {
     Alert.alert("Delete", "Delete this memory record?", [
       { text: "Cancel", style: "cancel" },
@@ -100,6 +111,22 @@ export default function RecordDetailScreen() {
       fontSize: 18,
       fontFamily: "Inter_600SemiBold",
       color: colors.foreground,
+    },
+    continueBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: 16,
+      backgroundColor: colors.primary + "18",
+      borderWidth: 1,
+      borderColor: colors.primary + "40",
+    },
+    continueBtnText: {
+      fontSize: 13,
+      fontFamily: "Inter_600SemiBold",
+      color: colors.primary,
     },
     deleteBtn: { padding: 4 },
     scroll: { flex: 1 },
@@ -175,6 +202,10 @@ export default function RecordDetailScreen() {
           <Feather name="arrow-left" size={22} color={colors.foreground} />
         </Pressable>
         <Text style={s.headerTitle}>{record.date}</Text>
+        <Pressable style={s.continueBtn} onPress={handleContinue}>
+          <Feather name="file-plus" size={14} color={colors.primary} />
+          <Text style={s.continueBtnText}>New note</Text>
+        </Pressable>
         <Pressable style={s.deleteBtn} onPress={handleDelete}>
           <Feather name="trash-2" size={20} color={colors.destructive} />
         </Pressable>

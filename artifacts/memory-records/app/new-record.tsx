@@ -2,8 +2,8 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { Image } from "expo-image";
-import { router } from "expo-router";
-import React, { useRef, useState } from "react";
+import { router, useLocalSearchParams } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -87,6 +87,12 @@ export default function NewRecordScreen() {
   const { settings } = useSettings();
   const { saveToObsidian } = useObsidian();
 
+  // Context passed from an existing record's "New note" button
+  const { contextNote, contextTags } = useLocalSearchParams<{
+    contextNote?: string;
+    contextTags?: string;
+  }>();
+
   const [mode, setMode] = useState<"photo" | "note" | null>(null);
   const [photo, setPhoto] = useState<PhotoData | null>(null);
   const [note, setNote] = useState("");
@@ -103,6 +109,19 @@ export default function NewRecordScreen() {
   // Interview state
   const [interviewEnabled, setInterviewEnabled] = useState(false);
   const { question, isLoading: interviewLoading, error: interviewError, startInterview, nextQuestion, reset: resetInterview } = useInterview();
+
+  // Auto-initialize when arriving from an existing record's "New note" button
+  useEffect(() => {
+    if (!contextNote) return;
+    const parsedTags: string[] = (() => {
+      try { return JSON.parse(contextTags ?? "[]"); } catch { return []; }
+    })();
+    setMode("note");
+    if (parsedTags.length > 0) setSelectedTags(parsedTags);
+    setInterviewEnabled(true);
+    startInterview(parsedTags, contextNote);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once on mount only
 
   // Voice modal
   const [voiceModalVisible, setVoiceModalVisible] = useState(false);
@@ -164,7 +183,7 @@ export default function NewRecordScreen() {
     if (Platform.OS !== "web") Haptics.selectionAsync();
     if (!interviewEnabled) {
       setInterviewEnabled(true);
-      await startInterview(selectedTags);
+      await startInterview(selectedTags, contextNote ?? undefined);
     } else {
       setInterviewEnabled(false);
       resetInterview();
@@ -617,6 +636,23 @@ export default function NewRecordScreen() {
       color: colors.mutedForeground,
       fontStyle: "italic",
     },
+    contextBanner: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 8,
+      backgroundColor: colors.accent + "12",
+      borderBottomWidth: 1,
+      borderBottomColor: colors.accent + "28",
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+    },
+    contextBannerText: {
+      flex: 1,
+      fontSize: 12,
+      fontFamily: "Inter_400Regular",
+      color: colors.accent,
+      lineHeight: 17,
+    },
     savedBanner: {
       flexDirection: "row",
       alignItems: "center",
@@ -773,6 +809,17 @@ export default function NewRecordScreen() {
           <Text style={s.savedBannerText}>Note saved — interview continues below</Text>
         </View>
       )}
+
+      {/* Context banner — shown when continuing from an existing record */}
+      {contextNote ? (
+        <View style={s.contextBanner}>
+          <Feather name="link" size={13} color={colors.accent} style={{ marginTop: 1 }} />
+          <Text style={s.contextBannerText} numberOfLines={2}>
+            <Text style={{ fontFamily: "Inter_600SemiBold" }}>Continuing from: </Text>
+            {contextNote.length > 100 ? contextNote.slice(0, 97) + "…" : contextNote}
+          </Text>
+        </View>
+      ) : null}
 
       {/* Mode picker — shown before choosing */}
       {!showContent ? (
