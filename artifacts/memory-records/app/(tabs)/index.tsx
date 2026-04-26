@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import {
   Alert,
   FlatList,
@@ -17,11 +17,18 @@ import { RecordCard } from "@/components/RecordCard";
 import { MemoryRecord, useRecords } from "@/context/RecordsContext";
 import { useColors } from "@/hooks/useColors";
 
+const UNTAGGED_KEY = "__untagged__";
+
+type ListItem =
+  | { type: "header"; tag: string; count: number }
+  | { type: "record"; record: MemoryRecord };
+
 export default function HomeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { records, deleteRecord, updateRecord, isLoading } = useRecords();
   const [refreshing] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   const handleDelete = (record: MemoryRecord) => {
     Alert.alert("Delete Record", "Are you sure you want to delete this memory?", [
@@ -56,6 +63,47 @@ export default function HomeScreen() {
     if (Platform.OS !== "web") await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     router.push("/new-record");
   };
+
+  const toggleGroup = (tag: string) => {
+    if (Platform.OS !== "web") Haptics.selectionAsync();
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(tag)) next.delete(tag);
+      else next.add(tag);
+      return next;
+    });
+  };
+
+  // Group records by primary tag, tagged groups sorted alphabetically,
+  // untagged group always last.
+  const groups = useMemo<[string, MemoryRecord[]][]>(() => {
+    const map = new Map<string, MemoryRecord[]>();
+    for (const record of records) {
+      const key = record.tags?.[0] ?? UNTAGGED_KEY;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(record);
+    }
+    return [...map.entries()].sort(([a], [b]) => {
+      if (a === UNTAGGED_KEY) return 1;
+      if (b === UNTAGGED_KEY) return -1;
+      return a.localeCompare(b);
+    });
+  }, [records]);
+
+  // Flatten groups into a single array for FlatList, hiding records in
+  // collapsed groups.
+  const listData = useMemo<ListItem[]>(() => {
+    const items: ListItem[] = [];
+    for (const [tag, recs] of groups) {
+      items.push({ type: "header", tag, count: recs.length });
+      if (!collapsedGroups.has(tag)) {
+        for (const record of recs) {
+          items.push({ type: "record", record });
+        }
+      }
+    }
+    return items;
+  }, [groups, collapsedGroups]);
 
   const s = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
@@ -133,6 +181,38 @@ export default function HomeScreen() {
       paddingHorizontal: 20,
       paddingBottom: 8,
     },
+    // Group header
+    groupHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      marginHorizontal: 16,
+      marginTop: 10,
+      marginBottom: 4,
+      backgroundColor: colors.card,
+      borderRadius: colors.radius,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    groupHeaderLabel: {
+      flex: 1,
+      fontSize: 14,
+      fontFamily: "Inter_600SemiBold",
+      color: colors.foreground,
+    },
+    groupCountBadge: {
+      backgroundColor: colors.primary + "18",
+      borderRadius: 10,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+    },
+    groupCountText: {
+      fontSize: 12,
+      fontFamily: "Inter_600SemiBold",
+      color: colors.primary,
+    },
   });
 
   return (
@@ -148,8 +228,10 @@ export default function HomeScreen() {
       </View>
 
       <FlatList
-        data={records}
-        keyExtractor={(item) => item.id}
+        data={listData}
+        keyExtractor={(item) =>
+          item.type === "header" ? `header-${item.tag}` : item.record.id
+        }
         style={s.list}
         contentContainerStyle={[
           s.listContent,
@@ -159,7 +241,10 @@ export default function HomeScreen() {
         refreshing={refreshing}
         ListHeaderComponent={
           records.length > 0 ? (
-            <Text style={s.count}>{records.length} {records.length === 1 ? "record" : "records"}</Text>
+            <Text style={s.count}>
+              {records.length} {records.length === 1 ? "record" : "records"}
+              {" · "}{groups.length} {groups.length === 1 ? "folder" : "folders"}
+            </Text>
           ) : null
         }
         ListEmptyComponent={
@@ -175,14 +260,41 @@ export default function HomeScreen() {
             </View>
           ) : null
         }
-        renderItem={({ item }) => (
-          <RecordCard
-            record={item}
-            onPress={() => router.push({ pathname: "/record/[id]", params: { id: item.id } })}
-            onDelete={() => handleDelete(item)}
-            onAddPhoto={item.imageUri ? undefined : () => handleAddPhoto(item)}
-          />
-        )}
+        renderItem={({ item }) => {
+          if (item.type === "header") {
+            const isCollapsed = collapsedGroups.has(item.tag);
+            const isUntagged = item.tag === UNTAGGED_KEY;
+            return (
+              <Pressable style={s.groupHeader} onPress={() => toggleGroup(item.tag)}>
+                <Feather
+                  name={isCollapsed ? "folder" : "folder-open"}
+                  size={16}
+                  color={isUntagged ? colors.mutedForeground : colors.primary}
+                />
+                <Text style={s.groupHeaderLabel}>
+                  {isUntagged ? "Untagged" : `#${item.tag}`}
+                </Text>
+                <View style={s.groupCountBadge}>
+                  <Text style={s.groupCountText}>{item.count}</Text>
+                </View>
+                <Feather
+                  name={isCollapsed ? "chevron-right" : "chevron-down"}
+                  size={16}
+                  color={colors.mutedForeground}
+                />
+              </Pressable>
+            );
+          }
+          const record = item.record;
+          return (
+            <RecordCard
+              record={record}
+              onPress={() => router.push({ pathname: "/record/[id]", params: { id: record.id } })}
+              onDelete={() => handleDelete(record)}
+              onAddPhoto={record.imageUri ? undefined : () => handleAddPhoto(record)}
+            />
+          );
+        }}
       />
     </View>
   );
