@@ -109,29 +109,47 @@ export default function SettingsScreen() {
       if (result.canceled || result.assets.length === 0) return;
 
       const parsed: Array<Omit<MemoryRecord, "id">> = [];
-      const failed: string[] = [];
+      const readErrors: string[] = [];
+      const parseErrors: string[] = [];
 
-      for (const asset of result.assets) {
+      const readFile = async (uri: string): Promise<string> => {
         try {
-          const content = await FileSystem.readAsStringAsync(asset.uri, {
+          return await FileSystem.readAsStringAsync(uri, {
             encoding: FileSystem.EncodingType.UTF8,
           });
+        } catch {
+          // Fallback for Android content:// URIs that FileSystem can't open
+          const res = await fetch(uri);
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return await res.text();
+        }
+      };
+
+      for (const asset of result.assets) {
+        const name = asset.name ?? "unknown file";
+        try {
+          const content = await readFile(asset.uri);
           const note = parseObsidianNote(content);
           if (note) {
             parsed.push(note);
           } else {
-            failed.push(asset.name ?? "unknown file");
+            parseErrors.push(name);
           }
-        } catch {
-          failed.push(asset.name ?? "unknown file");
+        } catch (e) {
+          readErrors.push(`${name} (${String(e)})`);
         }
       }
 
       if (parsed.length === 0) {
-        Alert.alert(
-          "No valid notes found",
-          "The selected file(s) don't appear to be Memory Records notes exported to Obsidian.\n\nMake sure you select .md files that were created by this app."
-        );
+        let msg = "Could not import any notes from the selected file(s).";
+        if (readErrors.length > 0) {
+          msg += `\n\nFile read error(s):\n${readErrors.join("\n")}`;
+        }
+        if (parseErrors.length > 0) {
+          msg += `\n\nNot recognised as Memory Records notes:\n${parseErrors.join("\n")}`;
+          msg += "\n\nMake sure you select .md files created by this app.";
+        }
+        Alert.alert("No notes imported", msg);
         return;
       }
 
@@ -145,7 +163,8 @@ export default function SettingsScreen() {
       if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
       let msg = `${parsed.length} note${parsed.length !== 1 ? "s" : ""} imported successfully.`;
-      if (failed.length > 0) msg += `\n\n${failed.length} file(s) skipped (not Memory Records notes): ${failed.join(", ")}`;
+      const skipped = [...readErrors, ...parseErrors];
+      if (skipped.length > 0) msg += `\n\n${skipped.length} file(s) skipped: ${skipped.join(", ")}`;
       Alert.alert("Import Complete", msg);
     } catch (e) {
       Alert.alert("Import Error", String(e));
