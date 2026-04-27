@@ -1,5 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system";
 import * as Haptics from "expo-haptics";
 import React, { useState } from "react";
 import {
@@ -20,6 +22,7 @@ import { useAuth } from "@/context/AuthContext";
 import { MemoryRecord, useRecords } from "@/context/RecordsContext";
 import { VoiceLanguage, VOICE_LANGUAGES, useSettings } from "@/context/SettingsContext";
 import { useColors } from "@/hooks/useColors";
+import { isObsidianMarkdown, parseMultipleObsidianNotes, parseObsidianNote } from "@/utils/obsidianParser";
 
 export default function SettingsScreen() {
   const colors = useColors();
@@ -51,27 +54,101 @@ export default function SettingsScreen() {
     Keyboard.dismiss();
     setImporting(true);
     try {
-      const parsed = JSON.parse(importText.trim());
-      const incoming: MemoryRecord[] = Array.isArray(parsed)
-        ? parsed
-        : Array.isArray(parsed?.records)
-        ? parsed.records
-        : null;
-      const incomingTags: string[] = Array.isArray(parsed?.tags) ? parsed.tags : [];
-      if (!incoming) throw new Error("JSON does not contain a valid records array.");
-      const valid = incoming.filter(
-        (r) => r && typeof r.id === "string" && typeof r.note === "string"
-      );
-      if (valid.length === 0) throw new Error("No valid records found in the backup.");
-      await importRecords(valid, incomingTags);
+      const text = importText.trim();
+      let incoming: MemoryRecord[];
+      let incomingTags: string[] = [];
+
+      if (isObsidianMarkdown(text) || (text.includes("**Date:**") && text.includes("## Note"))) {
+        // Obsidian Markdown paste — may contain one or several notes
+        const parsed = parseMultipleObsidianNotes(text);
+        if (parsed.length === 0) {
+          const single = parseObsidianNote(text);
+          if (!single) throw new Error("Could not find a valid Memory Records note in this text.");
+          parsed.push(single);
+        }
+        incoming = parsed.map((r) => ({
+          ...r,
+          id: Date.now().toString(36) + Math.random().toString(36).slice(2, 9),
+        })) as MemoryRecord[];
+        incomingTags = Array.from(new Set(incoming.flatMap((r) => r.tags ?? [])));
+      } else {
+        // JSON backup
+        const parsedJson = JSON.parse(text);
+        const rawRecords: MemoryRecord[] = Array.isArray(parsedJson)
+          ? parsedJson
+          : Array.isArray(parsedJson?.records)
+          ? parsedJson.records
+          : null;
+        incomingTags = Array.isArray(parsedJson?.tags) ? parsedJson.tags : [];
+        if (!rawRecords) throw new Error("JSON does not contain a valid records array.");
+        incoming = rawRecords.filter(
+          (r) => r && typeof r.id === "string" && typeof r.note === "string"
+        );
+        if (incoming.length === 0) throw new Error("No valid records found in the backup.");
+      }
+
+      await importRecords(incoming, incomingTags);
       if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setImportModalVisible(false);
       setImportText("");
-      Alert.alert("Import Complete", `${valid.length} record${valid.length !== 1 ? "s" : ""} restored.`);
+      Alert.alert("Import Complete", `${incoming.length} record${incoming.length !== 1 ? "s" : ""} restored.`);
     } catch (e) {
-      Alert.alert("Import Failed", `Could not parse backup:\n${String(e)}`);
+      Alert.alert("Import Failed", `Could not parse the pasted content:\n${String(e)}`);
     } finally {
       setImporting(false);
+    }
+  };
+
+  const handleObsidianImport = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ["text/markdown", "text/plain", "application/octet-stream", "*/*"],
+        multiple: true,
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || result.assets.length === 0) return;
+
+      const parsed: Array<Omit<MemoryRecord, "id">> = [];
+      const failed: string[] = [];
+
+      for (const asset of result.assets) {
+        try {
+          const content = await FileSystem.readAsStringAsync(asset.uri, {
+            encoding: FileSystem.EncodingType.UTF8,
+          });
+          const note = parseObsidianNote(content);
+          if (note) {
+            parsed.push(note);
+          } else {
+            failed.push(asset.name ?? "unknown file");
+          }
+        } catch {
+          failed.push(asset.name ?? "unknown file");
+        }
+      }
+
+      if (parsed.length === 0) {
+        Alert.alert(
+          "No valid notes found",
+          "The selected file(s) don't appear to be Memory Records notes exported to Obsidian.\n\nMake sure you select .md files that were created by this app."
+        );
+        return;
+      }
+
+      const incoming: MemoryRecord[] = parsed.map((r) => ({
+        ...r,
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 9),
+      })) as MemoryRecord[];
+      const incomingTags = Array.from(new Set(incoming.flatMap((r) => r.tags ?? [])));
+
+      await importRecords(incoming, incomingTags);
+      if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      let msg = `${parsed.length} note${parsed.length !== 1 ? "s" : ""} imported successfully.`;
+      if (failed.length > 0) msg += `\n\n${failed.length} file(s) skipped (not Memory Records notes): ${failed.join(", ")}`;
+      Alert.alert("Import Complete", msg);
+    } catch (e) {
+      Alert.alert("Import Error", String(e));
     }
   };
 
@@ -386,11 +463,11 @@ export default function SettingsScreen() {
             <View style={s.modalHandle} />
             <Text style={s.modalTitle}>Import Backup</Text>
             <Text style={s.modalHint}>
-              Paste the full JSON content of a previously exported backup. Records with the same ID will be overwritten; all others will be merged in.
+              Paste either a JSON backup or the raw text of one or more Obsidian notes exported by this app. The format is detected automatically. Records are merged — nothing is deleted.
             </Text>
             <TextInput
               style={[s.importInput, { color: colors.foreground, borderColor: colors.border }]}
-              placeholder={'Paste JSON here…\n{"records":[…],"tags":[…]}'}
+              placeholder={"Paste JSON backup or Obsidian note text here…"}
               placeholderTextColor={colors.mutedForeground}
               value={importText}
               onChangeText={setImportText}
@@ -567,9 +644,14 @@ export default function SettingsScreen() {
               <Text style={s.rowLabel}>Export all records</Text>
               <Text style={s.rowValue}>{records.length} record{records.length !== 1 ? "s" : ""}</Text>
             </Pressable>
-            <Pressable style={s.row} onPress={() => { setImportText(""); setImportModalVisible(true); }}>
+            <Pressable style={[s.row, s.rowBorder]} onPress={() => { setImportText(""); setImportModalVisible(true); }}>
               <Feather name="download" size={18} color={colors.primary} />
-              <Text style={s.rowLabel}>Import from backup</Text>
+              <Text style={s.rowLabel}>Import from JSON backup</Text>
+              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+            </Pressable>
+            <Pressable style={s.row} onPress={handleObsidianImport}>
+              <Feather name="file-text" size={18} color={colors.primary} />
+              <Text style={s.rowLabel}>Import from Obsidian notes</Text>
               <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
             </Pressable>
           </View>
