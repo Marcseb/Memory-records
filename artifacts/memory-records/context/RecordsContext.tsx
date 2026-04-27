@@ -22,6 +22,7 @@ interface RecordsContextType {
   addRecord: (record: MemoryRecord) => Promise<void>;
   updateRecord: (id: string, updates: Partial<MemoryRecord>) => Promise<void>;
   deleteRecord: (id: string) => Promise<void>;
+  importRecords: (incoming: MemoryRecord[], incomingTags: string[]) => Promise<void>;
   isLoading: boolean;
   knownTags: string[];
   addTag: (tag: string) => Promise<void>;
@@ -98,6 +99,22 @@ export function RecordsProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const importRecords = useCallback(async (incoming: MemoryRecord[], incomingTags: string[]) => {
+    // Merge: keep existing records not in the import, add/overwrite with incoming
+    setRecords((prev) => {
+      const existingIds = new Set(incoming.map((r) => r.id));
+      const kept = prev.filter((r) => !existingIds.has(r.id));
+      const next = [...incoming, ...kept].sort((a, b) => b.createdAt - a.createdAt);
+      AsyncStorage.setItem(RECORDS_KEY, JSON.stringify(next));
+      return next;
+    });
+    setKnownTags((prev) => {
+      const merged = Array.from(new Set([...prev, ...incomingTags])).sort();
+      AsyncStorage.setItem(TAGS_KEY, JSON.stringify(merged));
+      return merged;
+    });
+  }, []);
+
   const addTag = useCallback(async (tag: string) => {
     const normalized = tag.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9\-]/g, "");
     if (!normalized) return;
@@ -118,7 +135,7 @@ export function RecordsProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <RecordsContext.Provider value={{ records, addRecord, updateRecord, deleteRecord, isLoading, knownTags, addTag, deleteTag }}>
+    <RecordsContext.Provider value={{ records, addRecord, updateRecord, deleteRecord, importRecords, isLoading, knownTags, addTag, deleteTag }}>
       {children}
     </RecordsContext.Provider>
   );

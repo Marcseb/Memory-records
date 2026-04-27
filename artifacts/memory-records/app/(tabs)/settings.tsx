@@ -4,8 +4,11 @@ import * as Haptics from "expo-haptics";
 import React, { useState } from "react";
 import {
   Alert,
+  Keyboard,
+  Modal,
   Platform,
   Pressable,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -14,7 +17,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useAuth } from "@/context/AuthContext";
-import { useRecords } from "@/context/RecordsContext";
+import { MemoryRecord, useRecords } from "@/context/RecordsContext";
 import { VoiceLanguage, VOICE_LANGUAGES, useSettings } from "@/context/SettingsContext";
 import { useColors } from "@/hooks/useColors";
 
@@ -22,12 +25,55 @@ export default function SettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { resetAllData } = useAuth();
-  const { knownTags, deleteTag } = useRecords();
+  const { records, knownTags, deleteTag, importRecords } = useRecords();
   const { settings, updateSettings } = useSettings();
   const [vaultName, setVaultName] = useState(settings.vaultName);
   const [folder, setFolder] = useState(settings.folder);
   const [authorName, setAuthorName] = useState(settings.authorName);
   const [saving, setSaving] = useState(false);
+  const [importModalVisible, setImportModalVisible] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importing, setImporting] = useState(false);
+
+  const handleExport = async () => {
+    try {
+      const payload = JSON.stringify({ records, tags: knownTags }, null, 2);
+      await Share.share({
+        message: payload,
+        title: "Memory Records Backup",
+      });
+    } catch (e) {
+      Alert.alert("Export Error", String(e));
+    }
+  };
+
+  const handleImportConfirm = async () => {
+    Keyboard.dismiss();
+    setImporting(true);
+    try {
+      const parsed = JSON.parse(importText.trim());
+      const incoming: MemoryRecord[] = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray(parsed?.records)
+        ? parsed.records
+        : null;
+      const incomingTags: string[] = Array.isArray(parsed?.tags) ? parsed.tags : [];
+      if (!incoming) throw new Error("JSON does not contain a valid records array.");
+      const valid = incoming.filter(
+        (r) => r && typeof r.id === "string" && typeof r.note === "string"
+      );
+      if (valid.length === 0) throw new Error("No valid records found in the backup.");
+      await importRecords(valid, incomingTags);
+      if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setImportModalVisible(false);
+      setImportText("");
+      Alert.alert("Import Complete", `${valid.length} record${valid.length !== 1 ? "s" : ""} restored.`);
+    } catch (e) {
+      Alert.alert("Import Failed", `Could not parse backup:\n${String(e)}`);
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const handleSave = async () => {
     if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -269,10 +315,111 @@ export default function SettingsScreen() {
       top: 6,
       right: 6,
     },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.45)",
+      justifyContent: "flex-end",
+    },
+    modalSheet: {
+      backgroundColor: colors.background,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      padding: 20,
+      paddingTop: 12,
+      gap: 12,
+    },
+    modalHandle: {
+      width: 36,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: colors.border,
+      alignSelf: "center",
+      marginBottom: 4,
+    },
+    modalTitle: {
+      fontSize: 17,
+      fontFamily: "Inter_600SemiBold",
+      color: colors.foreground,
+    },
+    modalHint: {
+      fontSize: 13,
+      fontFamily: "Inter_400Regular",
+      color: colors.mutedForeground,
+      lineHeight: 18,
+    },
+    importInput: {
+      borderWidth: 1,
+      borderRadius: colors.radius,
+      padding: 12,
+      fontFamily: "Inter_400Regular",
+      fontSize: 13,
+      minHeight: 140,
+      backgroundColor: colors.surface,
+    },
+    modalActions: {
+      flexDirection: "row",
+      gap: 10,
+    },
+    modalBtn: {
+      flex: 1,
+      paddingVertical: 13,
+      borderRadius: colors.radius,
+      alignItems: "center",
+    },
+    modalBtnText: {
+      fontSize: 15,
+      fontFamily: "Inter_600SemiBold",
+    },
   });
 
   return (
     <View style={s.container}>
+      {/* Import Modal */}
+      <Modal
+        visible={importModalVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setImportModalVisible(false)}
+      >
+        <Pressable style={s.modalOverlay} onPress={() => { Keyboard.dismiss(); setImportModalVisible(false); }}>
+          <Pressable style={[s.modalSheet, { paddingBottom: insets.bottom + 16 }]} onPress={() => {}}>
+            <View style={s.modalHandle} />
+            <Text style={s.modalTitle}>Import Backup</Text>
+            <Text style={s.modalHint}>
+              Paste the full JSON content of a previously exported backup. Records with the same ID will be overwritten; all others will be merged in.
+            </Text>
+            <TextInput
+              style={[s.importInput, { color: colors.foreground, borderColor: colors.border }]}
+              placeholder={'Paste JSON here…\n{"records":[…],"tags":[…]}'}
+              placeholderTextColor={colors.mutedForeground}
+              value={importText}
+              onChangeText={setImportText}
+              multiline
+              autoCorrect={false}
+              autoCapitalize="none"
+              textAlignVertical="top"
+            />
+            <View style={s.modalActions}>
+              <Pressable
+                style={[s.modalBtn, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1 }]}
+                onPress={() => setImportModalVisible(false)}
+              >
+                <Text style={[s.modalBtnText, { color: colors.foreground }]}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[s.modalBtn, { backgroundColor: colors.primary, opacity: importing ? 0.6 : 1 }]}
+                onPress={handleImportConfirm}
+                disabled={importing || importText.trim().length === 0}
+              >
+                <Text style={[s.modalBtnText, { color: colors.primaryForeground }]}>
+                  {importing ? "Importing…" : "Import"}
+                </Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <View style={s.header}>
         <Text style={s.title}>Settings</Text>
       </View>
@@ -404,6 +551,28 @@ export default function SettingsScreen() {
               {saving ? "Saving..." : "Save Settings"}
             </Text>
           </Pressable>
+        </View>
+
+        {/* Backup */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Backup & Restore</Text>
+          <View style={s.infoBox}>
+            <Text style={s.infoText}>
+              Export saves all your records and tags as a JSON file you can store anywhere. Import merges a previously exported backup back in without deleting existing records.
+            </Text>
+          </View>
+          <View style={s.card}>
+            <Pressable style={[s.row, s.rowBorder]} onPress={handleExport}>
+              <Feather name="upload" size={18} color={colors.primary} />
+              <Text style={s.rowLabel}>Export all records</Text>
+              <Text style={s.rowValue}>{records.length} record{records.length !== 1 ? "s" : ""}</Text>
+            </Pressable>
+            <Pressable style={s.row} onPress={() => { setImportText(""); setImportModalVisible(true); }}>
+              <Feather name="download" size={18} color={colors.primary} />
+              <Text style={s.rowLabel}>Import from backup</Text>
+              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+            </Pressable>
+          </View>
         </View>
 
         {/* About */}
