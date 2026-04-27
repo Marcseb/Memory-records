@@ -19,12 +19,33 @@ interface UseInterviewResult {
 
 async function fetchFromAPI(messages: ChatMessage[], tags: string[]): Promise<string> {
   if (!API_URL) throw new Error("API URL not configured.");
-  const res = await fetch(`${API_URL}/api/interview`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, tags }),
-  });
-  const data = (await res.json()) as { question?: string; error?: string };
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/api/interview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages, tags }),
+    });
+  } catch {
+    throw new Error("Cannot reach the AI service. Check your internet connection and try again.");
+  }
+
+  const text = await res.text();
+
+  let data: { question?: string; error?: string };
+  try {
+    data = JSON.parse(text) as { question?: string; error?: string };
+  } catch {
+    // Server returned HTML (e.g. a 502 proxy page while the server is restarting)
+    if (text.trimStart().startsWith("<")) {
+      throw new Error(
+        `The AI service is temporarily unavailable (server returned status ${res.status}). Please wait a few seconds and try again.`
+      );
+    }
+    throw new Error(`Unexpected response from server (status ${res.status}).`);
+  }
+
   if (!res.ok || !data.question) {
     throw new Error(data.error ?? `Server error ${res.status}`);
   }
