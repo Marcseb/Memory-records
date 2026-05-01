@@ -99,73 +99,130 @@ export default function SettingsScreen() {
     }
   };
 
+  // Extract a human-readable filename from a SAF content URI or regular URI
+  const getNameFromUri = (uri: string): string => {
+    try {
+      const decoded = decodeURIComponent(uri);
+      // SAF URIs encode the path after the last ':'
+      const colonPart = decoded.split(":").pop() ?? decoded;
+      return colonPart.split("/").pop() ?? uri.slice(-20);
+    } catch {
+      return uri.slice(-20);
+    }
+  };
+
+  const readFileContent = async (uri: string): Promise<string> => {
+    try {
+      return await FileSystem.readAsStringAsync(uri, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+    } catch {
+      // Fallback: fetch() handles content:// and SAF URIs on Android
+      const res = await fetch(uri);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.text();
+    }
+  };
+
+  const processUris = async (
+    uris: Array<{ uri: string; name?: string }>
+  ): Promise<{ parsed: Array<Omit<MemoryRecord, "id">>; readErrors: string[]; parseErrors: string[] }> => {
+    const parsed: Array<Omit<MemoryRecord, "id">> = [];
+    const readErrors: string[] = [];
+    const parseErrors: string[] = [];
+
+    for (const { uri, name } of uris) {
+      const label = name ?? getNameFromUri(uri);
+      try {
+        const content = await readFileContent(uri);
+        const note = parseObsidianNote(content);
+        if (note) {
+          parsed.push(note);
+        } else {
+          parseErrors.push(label);
+        }
+      } catch (e) {
+        readErrors.push(`${label} (${String(e)})`);
+      }
+    }
+    return { parsed, readErrors, parseErrors };
+  };
+
+  const finishImport = async (
+    parsed: Array<Omit<MemoryRecord, "id">>,
+    readErrors: string[],
+    parseErrors: string[]
+  ) => {
+    if (parsed.length === 0) {
+      let msg = "Could not import any notes from the selected file(s).";
+      if (readErrors.length > 0) msg += `\n\nRead error(s):\n${readErrors.join("\n")}`;
+      if (parseErrors.length > 0) {
+        msg += `\n\nNot recognised as Memory Records notes:\n${parseErrors.join("\n")}`;
+        msg += "\n\nMake sure you pick .md files created by this app.";
+      }
+      Alert.alert("No notes imported", msg);
+      return;
+    }
+
+    const incoming: MemoryRecord[] = parsed.map((r) => ({
+      ...r,
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 9),
+    })) as MemoryRecord[];
+    const incomingTags = Array.from(new Set(incoming.flatMap((r) => r.tags ?? [])));
+
+    await importRecords(incoming, incomingTags);
+    if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+    let msg = `${parsed.length} note${parsed.length !== 1 ? "s" : ""} imported.`;
+    const skipped = [...parseErrors, ...readErrors];
+    if (skipped.length > 0) msg += `\n\n${skipped.length} file(s) skipped: ${skipped.join(", ")}`;
+    Alert.alert("Import Complete", msg);
+  };
+
   const handleObsidianImport = async () => {
     try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ["text/markdown", "text/plain", "application/octet-stream", "*/*"],
-        multiple: true,
-        copyToCacheDirectory: true,
-      });
-      if (result.canceled || result.assets.length === 0) return;
+      if (Platform.OS === "android") {
+        // Android: use folder picker (opens file browser, not "Recent")
+        const perm = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+        if (!perm.granted) return;
 
-      const parsed: Array<Omit<MemoryRecord, "id">> = [];
-      const readErrors: string[] = [];
-      const parseErrors: string[] = [];
+        const allUris = await FileSystem.StorageAccessFramework.readDirectoryAsync(perm.directoryUri);
 
-      const readFile = async (uri: string): Promise<string> => {
-        try {
-          return await FileSystem.readAsStringAsync(uri, {
-            encoding: FileSystem.EncodingType.UTF8,
-          });
-        } catch {
-          // Fallback for Android content:// URIs that FileSystem can't open
-          const res = await fetch(uri);
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          return await res.text();
-        }
-      };
-
-      for (const asset of result.assets) {
-        const name = asset.name ?? "unknown file";
-        try {
-          const content = await readFile(asset.uri);
-          const note = parseObsidianNote(content);
-          if (note) {
-            parsed.push(note);
-          } else {
-            parseErrors.push(name);
+        // Filter to .md files — SAF URIs encode the path so we URL-decode first
+        const mdUris = allUris.filter((uri) => {
+          try {
+            return decodeURIComponent(uri).toLowerCase().endsWith(".md");
+          } catch {
+            return uri.toLowerCase().includes(".md");
           }
-        } catch (e) {
-          readErrors.push(`${name} (${String(e)})`);
+        });
+
+        if (mdUris.length === 0) {
+          Alert.alert(
+            "No .md files found",
+            "The selected folder contains no Markdown files. Navigate to the folder inside your Obsidian vault that contains the Memory Records notes (e.g. Obsidian → YourVault → Memory Records)."
+          );
+          return;
         }
+
+        const { parsed, readErrors, parseErrors } = await processUris(
+          mdUris.map((uri) => ({ uri }))
+        );
+        await finishImport(parsed, readErrors, parseErrors);
+      } else {
+        // iOS / web: standard file picker (Files app, supports vault via iCloud)
+        const result = await DocumentPicker.getDocumentAsync({
+          type: ["text/markdown", "text/plain", "application/octet-stream", "*/*"],
+          multiple: true,
+          copyToCacheDirectory: true,
+        });
+        if (result.canceled || result.assets.length === 0) return;
+
+        const { parsed, readErrors, parseErrors } = await processUris(
+          result.assets.map((a) => ({ uri: a.uri, name: a.name ?? undefined }))
+        );
+        await finishImport(parsed, readErrors, parseErrors);
       }
-
-      if (parsed.length === 0) {
-        let msg = "Could not import any notes from the selected file(s).";
-        if (readErrors.length > 0) {
-          msg += `\n\nFile read error(s):\n${readErrors.join("\n")}`;
-        }
-        if (parseErrors.length > 0) {
-          msg += `\n\nNot recognised as Memory Records notes:\n${parseErrors.join("\n")}`;
-          msg += "\n\nMake sure you select .md files created by this app.";
-        }
-        Alert.alert("No notes imported", msg);
-        return;
-      }
-
-      const incoming: MemoryRecord[] = parsed.map((r) => ({
-        ...r,
-        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 9),
-      })) as MemoryRecord[];
-      const incomingTags = Array.from(new Set(incoming.flatMap((r) => r.tags ?? [])));
-
-      await importRecords(incoming, incomingTags);
-      if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-      let msg = `${parsed.length} note${parsed.length !== 1 ? "s" : ""} imported successfully.`;
-      const skipped = [...readErrors, ...parseErrors];
-      if (skipped.length > 0) msg += `\n\n${skipped.length} file(s) skipped: ${skipped.join(", ")}`;
-      Alert.alert("Import Complete", msg);
     } catch (e) {
       Alert.alert("Import Error", String(e));
     }
@@ -654,7 +711,8 @@ export default function SettingsScreen() {
           <Text style={s.sectionTitle}>Backup & Restore</Text>
           <View style={s.infoBox}>
             <Text style={s.infoText}>
-              Export saves all your records and tags as a JSON file you can store anywhere. Import merges a previously exported backup back in without deleting existing records.
+              Export saves all your records and tags as a JSON file you can store anywhere. Import merges a backup back in without deleting existing records.{"\n\n"}
+              <Text style={{ fontFamily: "Inter_600SemiBold" }}>Import from Obsidian</Text> opens a folder picker — navigate to your vault's Memory Records folder to import all notes at once.
             </Text>
           </View>
           <View style={s.card}>
