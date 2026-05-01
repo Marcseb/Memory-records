@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
+import { StorageAccessFramework } from "expo-file-system";
 import * as Haptics from "expo-haptics";
 import React, { useState } from "react";
 import {
@@ -183,10 +184,10 @@ export default function SettingsScreen() {
     try {
       if (Platform.OS === "android") {
         // Android: use folder picker (opens file browser, not "Recent")
-        const perm = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
+        const perm = await StorageAccessFramework.requestDirectoryPermissionsAsync();
         if (!perm.granted) return;
 
-        const allUris = await FileSystem.StorageAccessFramework.readDirectoryAsync(perm.directoryUri);
+        const allUris = await StorageAccessFramework.readDirectoryAsync(perm.directoryUri);
 
         // Filter to .md files — SAF URIs encode the path so we URL-decode first
         const mdUris = allUris.filter((uri) => {
