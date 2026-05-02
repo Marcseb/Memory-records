@@ -2,7 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
-import { StorageAccessFramework } from "expo-file-system";
+import { StorageAccessFramework } from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
 import React, { useState } from "react";
 import {
