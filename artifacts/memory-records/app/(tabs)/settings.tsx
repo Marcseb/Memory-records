@@ -4,7 +4,8 @@ import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import { StorageAccessFramework } from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
-import React, { useState } from "react";
+import * as SecureStore from "expo-secure-store";
+import React, { useEffect, useState } from "react";
 import {
   Alert,
   Keyboard,
@@ -38,6 +39,25 @@ export default function SettingsScreen() {
   const [importModalVisible, setImportModalVisible] = useState(false);
   const [importText, setImportText] = useState("");
   const [importing, setImporting] = useState(false);
+
+  const [mistralKey, setMistralKey] = useState("");
+  const [openaiKey, setOpenaiKey] = useState("");
+  const [showMistralKey, setShowMistralKey] = useState(false);
+  const [showOpenaiKey, setShowOpenaiKey] = useState(false);
+  const [aiKeysSaving, setAiKeysSaving] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [m, o] = await Promise.all([
+          SecureStore.getItemAsync("mr_mistral_key"),
+          SecureStore.getItemAsync("mr_openai_key"),
+        ]);
+        if (m) setMistralKey(m);
+        if (o) setOpenaiKey(o);
+      } catch { /* ignore */ }
+    })();
+  }, []);
 
   const handleExport = async () => {
     try {
@@ -244,6 +264,22 @@ export default function SettingsScreen() {
   const handleLanguageSelect = async (lang: VoiceLanguage) => {
     if (Platform.OS !== "web") await Haptics.selectionAsync();
     await updateSettings({ voiceLanguage: lang });
+  };
+
+  const handleSaveAiKeys = async () => {
+    setAiKeysSaving(true);
+    try {
+      await Promise.all([
+        SecureStore.setItemAsync("mr_mistral_key", mistralKey.trim()),
+        SecureStore.setItemAsync("mr_openai_key", openaiKey.trim()),
+      ]);
+      if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert("Saved", "AI keys saved securely on this device.");
+    } catch (e) {
+      Alert.alert("Error", "Could not save keys: " + String(e));
+    } finally {
+      setAiKeysSaving(false);
+    }
   };
 
   const handleDeleteTag = (tag: string) => {
@@ -704,6 +740,74 @@ export default function SettingsScreen() {
             <Text style={s.saveBtnText}>
               {saving ? "Saving..." : "Save Settings"}
             </Text>
+          </Pressable>
+        </View>
+
+        {/* AI Interviewer */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>AI Interviewer</Text>
+          <View style={s.infoBox}>
+            <Text style={s.infoTitle}>Your keys, your device</Text>
+            <Text style={s.infoText}>
+              API keys are stored encrypted on this device only — they never leave it. Each person using this app needs their own key.{"\n\n"}
+              <Text style={{ fontFamily: "Inter_600SemiBold" }}>Mistral</Text> (recommended): get a free key at console.mistral.ai{"\n"}
+              <Text style={{ fontFamily: "Inter_600SemiBold" }}>OpenAI</Text> (fallback): get a key at platform.openai.com
+            </Text>
+          </View>
+          <View style={{ height: 12 }} />
+          <Text style={s.label}>Mistral API Key</Text>
+          <View style={{ position: "relative", marginBottom: 12 }}>
+            <TextInput
+              style={[s.input, { marginBottom: 0, paddingRight: 44 }]}
+              value={mistralKey}
+              onChangeText={setMistralKey}
+              placeholder="sk-… (recommended)"
+              placeholderTextColor={colors.mutedForeground}
+              secureTextEntry={!showMistralKey}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <Pressable
+              onPress={() => setShowMistralKey((v) => !v)}
+              style={{ position: "absolute", right: 12, top: 0, bottom: 0, justifyContent: "center" }}
+              hitSlop={8}
+            >
+              <Feather name={showMistralKey ? "eye-off" : "eye"} size={18} color={colors.mutedForeground} />
+            </Pressable>
+          </View>
+          <Text style={s.label}>OpenAI API Key <Text style={{ color: colors.mutedForeground, fontFamily: "Inter_400Regular" }}>(optional fallback)</Text></Text>
+          <View style={{ position: "relative", marginBottom: 12 }}>
+            <TextInput
+              style={[s.input, { marginBottom: 0, paddingRight: 44 }]}
+              value={openaiKey}
+              onChangeText={setOpenaiKey}
+              placeholder="sk-… (optional)"
+              placeholderTextColor={colors.mutedForeground}
+              secureTextEntry={!showOpenaiKey}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <Pressable
+              onPress={() => setShowOpenaiKey((v) => !v)}
+              style={{ position: "absolute", right: 12, top: 0, bottom: 0, justifyContent: "center" }}
+              hitSlop={8}
+            >
+              <Feather name={showOpenaiKey ? "eye-off" : "eye"} size={18} color={colors.mutedForeground} />
+            </Pressable>
+          </View>
+          <View style={s.status}>
+            <View style={[s.statusDot, { backgroundColor: mistralKey.trim() || openaiKey.trim() ? colors.success : colors.mutedForeground }]} />
+            <Text style={[s.rowValue, { fontSize: 12 }]}>
+              {mistralKey.trim()
+                ? "Mistral key configured" + (openaiKey.trim() ? " + OpenAI fallback" : "")
+                : openaiKey.trim()
+                ? "OpenAI key configured (no Mistral)"
+                : "No key configured — AI Interviewer disabled"}
+            </Text>
+          </View>
+          <View style={{ height: 12 }} />
+          <Pressable style={s.saveBtn} onPress={handleSaveAiKeys} disabled={aiKeysSaving}>
+            <Text style={s.saveBtnText}>{aiKeysSaving ? "Saving…" : "Save AI Keys"}</Text>
           </Pressable>
         </View>
 
