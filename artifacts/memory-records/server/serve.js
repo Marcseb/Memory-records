@@ -111,6 +111,13 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host}`);
   let pathname = url.pathname;
 
+  // Redirect bare root requests to the app's base path
+  if (basePath && pathname === "/") {
+    res.writeHead(302, { location: basePath + "/" });
+    res.end();
+    return;
+  }
+
   if (basePath && pathname.startsWith(basePath)) {
     pathname = pathname.slice(basePath.length) || "/";
   }
