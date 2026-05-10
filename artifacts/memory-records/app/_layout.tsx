@@ -28,6 +28,7 @@ function RootLayoutNav() {
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="new-record" options={{ presentation: "modal", headerShown: false }} />
       <Stack.Screen name="record/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="help" options={{ presentation: "modal", headerShown: false }} />
     </Stack>
   );
 }

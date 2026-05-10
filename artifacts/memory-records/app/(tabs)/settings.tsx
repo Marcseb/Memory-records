@@ -20,6 +20,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
+import { router } from "expo-router";
 import { useAuth } from "@/context/AuthContext";
 import { MemoryRecord, useRecords } from "@/context/RecordsContext";
 import { VoiceLanguage, VOICE_LANGUAGES, useSettings } from "@/context/SettingsContext";
@@ -848,6 +849,11 @@ export default function SettingsScreen() {
               <Text style={s.rowLabel}>Memory Records</Text>
               <Text style={s.rowValue}>v1.0</Text>
             </View>
+            <Pressable style={[s.row, s.rowBorder]} onPress={() => router.push("/help")}>
+              <Feather name="help-circle" size={18} color={colors.primary} />
+              <Text style={s.rowLabel}>Help & features guide</Text>
+              <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+            </Pressable>
             <Pressable style={s.row} onPress={handleStorageDiagnostic}>
               <Feather name="database" size={18} color={colors.mutedForeground} />
               <Text style={[s.rowLabel, { color: colors.mutedForeground }]}>Storage diagnostic</Text>
