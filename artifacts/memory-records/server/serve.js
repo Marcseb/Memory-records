@@ -70,7 +70,9 @@ function serveLandingPage(req, res, landingPageTemplate, appName) {
   const protocol = forwardedProto || "https";
   const host = req.headers["x-forwarded-host"] || req.headers["host"];
   const baseUrl = `${protocol}://${host}`;
-  const expsUrl = `${host}`;
+  // Include the base path so Expo Go opens the manifest endpoint directly
+  // without an intermediate redirect that can strip the expo-platform header
+  const expsUrl = basePath ? `${host}${basePath}` : host;
 
   const html = landingPageTemplate
     .replace(/BASE_URL_PLACEHOLDER/g, baseUrl)
@@ -111,8 +113,21 @@ const server = http.createServer((req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host}`);
   let pathname = url.pathname;
 
-  // Redirect bare root requests to the app's base path
+  // Health check — always respond 200 regardless of base path
+  if (pathname === "/status" || pathname === `${basePath}/status`) {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ status: "ok" }));
+    return;
+  }
+
+  // Redirect bare root requests to the app's base path,
+  // but only for browser requests — Expo Go sends expo-platform header
+  // and must NOT be redirected or it loses the header
   if (basePath && pathname === "/") {
+    const platform = req.headers["expo-platform"];
+    if (platform === "ios" || platform === "android") {
+      return serveManifest(platform, res);
+    }
     res.writeHead(302, { location: basePath + "/" });
     res.end();
     return;
