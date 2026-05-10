@@ -474,10 +474,11 @@ function updateManifests(manifests, timestamp, baseUrl, assetsByHash) {
     manifest.createdAt = new Date(
       Number(timestamp.split("-")[0]),
     ).toISOString();
-    manifest.extra.expoClient.hostUri =
-      baseUrl.replace("https://", "") + "/" + platform;
-    manifest.extra.expoGo.debuggerHost =
-      baseUrl.replace("https://", "") + "/" + platform;
+    // hostUri must point to the base path where the manifest is served,
+    // without a trailing slash and without the platform name
+    const hostBase = baseUrl.replace("https://", "") + (basePath || "");
+    manifest.extra.expoClient.hostUri = hostBase;
+    manifest.extra.expoGo.debuggerHost = hostBase;
     manifest.extra.expoGo.packagerOpts.dev = false;
 
     if (manifest.assets && manifest.assets.length > 0) {
