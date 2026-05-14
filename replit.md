@@ -22,6 +22,7 @@ pnpm workspace monorepo using TypeScript. Contains an Express API server and an 
 - **Path**: `artifacts/memory-records/`
 - **Type**: Expo (React Native)
 - **Preview**: `/memory-records/`
+- **Published URL**: https://memory-vault-manager.replit.app (open on phone → redirects into Expo Go)
 - **Purpose**: A personal memory journaling app — users select photos from their gallery or paste from clipboard, add text or voice notes, and save the records to an Obsidian vault via the Actions URI plugin.
 
 **Key features:**
