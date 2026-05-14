@@ -64,6 +64,11 @@ export default function HomeScreen() {
     router.push("/new-record");
   };
 
+  const handleHelp = async () => {
+    if (Platform.OS !== "web") await Haptics.selectionAsync();
+    router.push("/help");
+  };
+
   const toggleGroup = (tag: string) => {
     if (Platform.OS !== "web") Haptics.selectionAsync();
     setCollapsedGroups((prev) => {
@@ -128,6 +133,21 @@ export default function HomeScreen() {
       fontSize: 24,
       fontFamily: "Inter_700Bold",
       color: colors.foreground,
+    },
+    headerRight: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+    },
+    helpBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: "center",
+      justifyContent: "center",
     },
     addBtn: {
       width: 44,
@@ -222,9 +242,14 @@ export default function HomeScreen() {
           <Text style={s.greeting}>Memory Records</Text>
           <Text style={s.title}>Your Memories</Text>
         </View>
-        <Pressable style={s.addBtn} onPress={handleNewRecord} testID="add-record-btn">
-          <Feather name="plus" size={22} color="#fff" />
-        </Pressable>
+        <View style={s.headerRight}>
+          <Pressable style={s.helpBtn} onPress={handleHelp} accessibilityLabel="Help & Features Guide">
+            <Feather name="help-circle" size={18} color={colors.mutedForeground} />
+          </Pressable>
+          <Pressable style={s.addBtn} onPress={handleNewRecord} testID="add-record-btn">
+            <Feather name="plus" size={22} color="#fff" />
+          </Pressable>
+        </View>
       </View>
 
       <FlatList
