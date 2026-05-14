@@ -8,11 +8,12 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
+import { AppSplash } from "@/components/AppSplash";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/context/AuthContext";
 import { RecordsProvider } from "@/context/RecordsContext";
@@ -41,8 +42,12 @@ export default function RootLayout() {
     Inter_700Bold,
   });
 
+  const [splashDone, setSplashDone] = useState(false);
+  const handleSplashDone = useCallback(() => setSplashDone(true), []);
+
   useEffect(() => {
     if (fontsLoaded || fontError) {
+      // Hide the native splash immediately so our custom one takes over
       SplashScreen.hideAsync();
     }
   }, [fontsLoaded, fontError]);
@@ -59,6 +64,7 @@ export default function RootLayout() {
                 <SettingsProvider>
                   <RecordsProvider>
                     <RootLayoutNav />
+                    {!splashDone && <AppSplash onDone={handleSplashDone} />}
                   </RecordsProvider>
                 </SettingsProvider>
               </AuthProvider>
