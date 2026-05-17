@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React from "react";
 import {
+  Linking,
   Platform,
   Pressable,
   ScrollView,
@@ -11,6 +12,10 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColors } from "@/hooks/useColors";
+
+const BMAC_URL   = "https://buymeacoffee.com/marcsebastien";
+const PAYPAL_URL = "https://www.paypal.com/donate/?business=7AUYVWJE39NMQ&no_recurring=0&item_name=Building+open+source+apps+that+are+secure%2C+practical%2C+and+keep+your+data+local%E2%80%94not+in+the+cloud.&currency_code=EUR";
+const GITHUB_URL = "https://github.com/Marcseb/Memory-records";
 
 interface SectionProps {
   icon: keyof typeof Feather.glyphMap;
@@ -269,6 +274,120 @@ export default function HelpScreen() {
             <Text style={s.strong}>AI calls are direct.</Text> When the AI Interviewer is active, your messages go directly from your device to Mistral or OpenAI using your own key — no intermediary server reads them.
           </Bullet>
         </Section>
+
+        <View style={s.divider} />
+
+        {/* ── Support section ── */}
+        <View style={{ marginBottom: 28 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 }}>
+            <View
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                backgroundColor: "#FFDD0020",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text style={{ fontSize: 16 }}>☕</Text>
+            </View>
+            <Text style={{ fontSize: 15, fontFamily: "Inter_700Bold", color: colors.foreground }}>
+              Support this project
+            </Text>
+          </View>
+
+          <Text
+            style={{
+              fontSize: 13,
+              fontFamily: "Inter_400Regular",
+              color: colors.mutedForeground,
+              lineHeight: 20,
+              marginBottom: 16,
+            }}
+          >
+            Memory Records is free and open-source. If it saves you time or brings you joy, a small contribution helps keep it alive and growing.
+          </Text>
+
+          {/* Buy Me a Coffee */}
+          <Pressable
+            onPress={() => Linking.openURL(BMAC_URL)}
+            style={({ pressed }) => ({
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 14,
+              backgroundColor: pressed ? "#e6c700" : "#FFDD00",
+              borderRadius: colors.radius,
+              paddingVertical: 14,
+              paddingHorizontal: 18,
+              marginBottom: 10,
+            })}
+          >
+            <Text style={{ fontSize: 22 }}>☕</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 14, fontFamily: "Inter_700Bold", color: "#1a1400" }}>
+                Buy Me a Coffee
+              </Text>
+              <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "#1a1400cc" }}>
+                buymeacoffee.com/marcsebastien
+              </Text>
+            </View>
+            <Feather name="external-link" size={16} color="#1a1400" />
+          </Pressable>
+
+          {/* PayPal */}
+          <Pressable
+            onPress={() => Linking.openURL(PAYPAL_URL)}
+            style={({ pressed }) => ({
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 14,
+              backgroundColor: pressed ? "#002070" : "#003087",
+              borderRadius: colors.radius,
+              paddingVertical: 14,
+              paddingHorizontal: 18,
+              marginBottom: 10,
+            })}
+          >
+            <Text style={{ fontSize: 22 }}>💙</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 14, fontFamily: "Inter_700Bold", color: "#ffffff" }}>
+                Donate via PayPal
+              </Text>
+              <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: "#ffffffaa" }}>
+                One-time donation in EUR
+              </Text>
+            </View>
+            <Feather name="external-link" size={16} color="#ffffff" />
+          </Pressable>
+
+          {/* GitHub */}
+          <Pressable
+            onPress={() => Linking.openURL(GITHUB_URL)}
+            style={({ pressed }) => ({
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 14,
+              backgroundColor: pressed ? colors.border : colors.surface,
+              borderRadius: colors.radius,
+              borderWidth: 1,
+              borderColor: colors.border,
+              paddingVertical: 14,
+              paddingHorizontal: 18,
+            })}
+          >
+            <Feather name="github" size={22} color={colors.foreground} />
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 14, fontFamily: "Inter_700Bold", color: colors.foreground }}>
+                View on GitHub
+              </Text>
+              <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
+                Marcseb/Memory-records
+              </Text>
+            </View>
+            <Feather name="external-link" size={16} color={colors.mutedForeground} />
+          </Pressable>
+        </View>
 
         <View style={s.divider} />
 
