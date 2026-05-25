@@ -1,8 +1,13 @@
 uploads = []
-outputs = []
 
 [[generated]]
 id = "fPmkLkpAnx3jzJs6aSZQA"
 uri = "file://artifacts/memory-records/assets/images/icon.png"
 type = "image"
 title = "generated_image"
+
+[[outputs]]
+id = "IU37gP2H4o49Tp3TexYcu"
+uri = "file://README.md"
+type = "text"
+title = "README.md — Memory Records"
