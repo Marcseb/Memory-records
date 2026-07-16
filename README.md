@@ -1,63 +1,130 @@
 # Memory Records
 
-A personal memory journaling app built with Expo (React Native). Capture moments with photos, voice, or text — then save them to your Obsidian vault for long-term archiving.
-
-**All data stays 100% on your device. No account required. No cloud sync. No tracking.**
+Journal your memories with photos, voice, and text — then archive them to your Obsidian vault. No cloud, no account, no data ever leaves your phone.
 
 ---
 
-## Try it now
+## Quick Start
 
-Open this URL on your phone (requires [Expo Go](https://expo.dev/go)):
-
-👉 **https://memory-vault-manager.replit.app**
-
-Your browser will redirect straight into the app inside Expo Go.
+Three steps and you're up in under a minute.
 
 ---
 
-## Features
+### Step 1 — Get the app on your phone
 
-### 📸 Capturing memories
-- **Photo from gallery** — pick any photo and the app automatically reads its EXIF metadata: date taken, GPS coordinates, and location name
-- **Clipboard paste** — paste a screenshot or image copied from another app; if no EXIF date is found, the app prompts you to enter one
-- **Text-only note** — write a note without any photo
-- **Voice-to-text** — tap the microphone to dictate your note hands-free (on-device, in French, Italian, or English)
-- **Tags** — organise memories by theme, person, or place; tags are shared across all records
+Memory Records runs inside **Expo Go**, a free app available on both platforms.
 
-### 🤖 AI Interviewer
-An optional AI agent guides you through warm, open-ended questions to help you recall richer details about a memory — dates, emotions, people, sensory impressions.
+| Platform | Install Expo Go |
+|---|---|
+| Android | [Google Play — Expo Go](https://play.google.com/store/apps/details?id=host.exp.exponent) |
+| iOS | [App Store — Expo Go](https://apps.apple.com/app/expo-go/id982107779) |
 
-- Works with **Mistral** (recommended, free tier at [console.mistral.ai](https://console.mistral.ai)) or **OpenAI** as a fallback
-- Your API key is stored **encrypted on your device only** — never sent to any server other than Mistral or OpenAI directly
+Once Expo Go is installed, open Memory Records:
 
-### 📚 Obsidian integration
+**On Android** — open Expo Go, tap **"Enter URL manually"** and type:
+```
+https://memory-vault-manager.replit.app
+```
+
+**On iOS** — open **Safari**, type that same address, and tap the prompt to open it in Expo Go.
+
+The app loads in a few seconds. You can save it to your Expo Go home screen for quick access later.
+
+---
+
+### Step 2 — Create your account
+
+Memory Records uses local authentication — your credentials are stored on your device only, never on a server.
+
+1. On the Register screen, pick a username and password.
+2. Tap **Create account**. That's it — you're in.
+
+> Your login is tied to this device. If you reinstall the app, you will need to register again and restore from a JSON backup.
+
+---
+
+### Step 3 — Capture your first memory
+
+Open the **Home** tab and tap **+**:
+
+1. Pick a photo from your gallery — the app reads its EXIF data automatically (date, GPS, location name).
+2. Add a text note, or tap the microphone to dictate hands-free.
+3. Optionally add tags to organise the memory.
+4. Tap **Save**.
+
+Your memory is stored locally, instantly, with no upload.
+
+---
+
+## Capturing memories
+
+- **Photo from gallery** — EXIF metadata (date, GPS, location) is extracted automatically; no manual entry needed.
+- **Clipboard paste** — paste a screenshot or image copied from another app. If no EXIF date is found, the app prompts you to enter one.
+- **Text-only note** — write a note without any photo; useful for thoughts or conversations.
+- **Voice-to-text** — dictate your note hands-free. Speech recognition runs on-device in French, Italian, or English.
+- **Tags** — add one or more tags per memory to organise by theme, person, or place. Tags are manageable in Settings.
+
+---
+
+## AI Interviewer
+
+An optional AI agent guides you through warm, open-ended questions to help you recall richer details — dates, emotions, people, sensory impressions.
+
+Works with **Mistral** (recommended, free tier at [console.mistral.ai](https://console.mistral.ai)) or **OpenAI** as a fallback.
+
+**Setup:**
+1. Get a free API key at [console.mistral.ai](https://console.mistral.ai) (or from [platform.openai.com](https://platform.openai.com)).
+2. In the app → Settings → AI Interviewer → paste your key.
+
+> Your API key is stored in the device's secure enclave — the same mechanism used by banking apps. It is never sent to any server other than Mistral or OpenAI directly when you start an interview.
+
+---
+
+## Obsidian integration
+
 Memory Records can save notes directly into your **Obsidian vault** as Markdown files — formatted, dated, and tagged — using the [Actions URI](https://obsidian-actions-uri.net) community plugin.
 
-- Each note includes the date, year, tags, GPS coordinates, location name, and your full text
-- Notes are formatted in Markdown and fully searchable inside Obsidian
-- Both apps must be installed on the same device
+**Setup:**
+1. In Obsidian → Settings → Community Plugins → Browse → search **"Actions URI"** → Install and Enable.
+2. In the app → Settings → Obsidian Integration → enter your vault name and the target folder (default: `Memory Records`).
+3. On any record's detail screen, tap **Save to Obsidian**.
 
-### 💾 Backup & restore
-- **JSON export** — share a complete backup of all records and tags as a JSON file
-- **JSON import** — merge a backup into the app; duplicates are avoided by ID
-- **Import from Obsidian** — reimport previously saved Markdown notes back into the app
+> Both Obsidian and Memory Records must be installed on the same device. The app opens Obsidian via a deep link — no Wi-Fi or server needed.
 
-### 🔒 Privacy & security
-- All data stored in your phone's local storage (AsyncStorage)
-- AI API keys stored in the device's secure enclave (same mechanism used by banking apps)
-- Local authentication — credentials never sent to a remote server
-- AI calls go directly from your device to Mistral/OpenAI — no intermediary server
+Each saved note includes the date, year, tags, GPS coordinates, location name, and your full text, formatted in Markdown and fully searchable inside Obsidian.
 
 ---
 
-## Setup
+## Backup & restore
+
+- **JSON export** — tap Export in Settings to share a complete backup of all records and tags as a JSON file. Save it to Files, iCloud, Google Drive, or anywhere via the share sheet.
+- **JSON import** — paste a JSON backup into the Import panel. Records are merged with existing ones; duplicates are avoided by ID.
+- **Import from Obsidian** — reimport previously saved Memory Records notes from your vault. On Android, pick the vault folder directly; on iOS, use the Files app to select individual Markdown files.
+
+> Regular JSON exports are the recommended backup strategy. If you reinstall the app or change device, a JSON backup lets you restore everything instantly.
+
+---
+
+## Support this project
+
+Memory Records is free and open-source. If it saves you time or brings you joy, a contribution is always appreciated!
+
+- ☕ [Buy me a coffee](https://buymeacoffee.com/marcsebastien)
+- 💙 [Donate via PayPal](https://www.paypal.com/donate/?business=7AUYVWJE39NMQ&no_recurring=0&item_name=Building+open+source+apps+that+are+secure%2C+practical%2C+and+keep+your+data+local%E2%80%94not+in+the+cloud.&currency_code=EUR)
+
+---
+---
+
+# Advanced
+
+---
+
+## Running locally
 
 ### Prerequisites
-- [Expo Go](https://expo.dev/go) installed on your phone (iOS or Android)
+- [Expo Go](https://expo.dev/go) on your phone
 - Node.js 24+ and pnpm
 
-### Run locally
 ```bash
 git clone https://github.com/Marcseb/Memory-records.git
 cd Memory-records
@@ -65,36 +132,35 @@ pnpm install
 pnpm --filter @workspace/memory-records run dev
 ```
 
-Then scan the QR code with Expo Go.
-
-### Obsidian integration setup
-1. In Obsidian → Settings → Community Plugins → Browse → search **"Actions URI"** → Install and Enable
-2. In the app → Settings → Obsidian Integration → enter your vault name and target folder
-
-### AI Interviewer setup
-1. Get a free API key at [console.mistral.ai](https://console.mistral.ai) (or use OpenAI)
-2. In the app → Settings → AI Interviewer → paste your key
+Scan the QR code shown in the terminal with Expo Go.
 
 ---
 
-## Tech stack
+## Privacy & security
+
+- **All data stays on your device.** Records, photos, tags, and settings are stored in your phone's local storage (AsyncStorage). Nothing is uploaded to any server.
+- **Encrypted key storage.** AI API keys are stored using the device's secure enclave (expo-secure-store), the same mechanism used by banking apps. They are never written to plain storage.
+- **Local authentication.** Your login credentials are stored locally on this device and are never sent to a remote server.
+- **AI calls are direct.** When the AI Interviewer is active, your messages go directly from your device to Mistral or OpenAI using your own key — no intermediary server reads them.
+- **No shared database.** Each installation is fully independent. One user cannot see another user's records.
+
+---
+
+## Architecture
 
 | Layer | Technology |
 |---|---|
 | Mobile app | Expo SDK 54 / React Native |
 | Routing | expo-router |
-| Storage | AsyncStorage + expo-secure-store |
+| Local storage | AsyncStorage |
+| Secure storage | expo-secure-store (device secure enclave) |
 | AI | Mistral AI (primary) / OpenAI (fallback) |
 | Obsidian | Actions URI deep link |
 | Monorepo | pnpm workspaces + TypeScript |
 
----
-
-## Project structure
-
 ```
 artifacts/memory-records/   ← Expo app
-  app/                      ← Screens (expo-router)
+  app/
     (auth)/                 ← Login & registration
     (tabs)/                 ← Home & Settings tabs
     new-record.tsx          ← New memory creation
@@ -102,20 +168,10 @@ artifacts/memory-records/   ← Expo app
     help.tsx                ← Help & features guide
   components/               ← Shared UI components
   context/                  ← Auth, Records, Settings providers
-  hooks/                    ← useInterview, useColors, ...
+  hooks/                    ← useInterview, useColors, …
 artifacts/api-server/       ← Express API server (TypeScript)
 lib/                        ← Shared TypeScript libraries
 ```
-
----
-
-## Support this project
-
-Memory Records is free and open-source. If it saves you time or brings you joy, a small contribution helps keep it alive and growing.
-
-☕ [Buy Me a Coffee](https://buymeacoffee.com/marcsebastien)
-
-💙 [Donate via PayPal](https://www.paypal.com/donate/?business=7AUYVWJE39NMQ&no_recurring=0&item_name=Building+open+source+apps+that+are+secure%2C+practical%2C+and+keep+your+data+local%E2%80%94not+in+the+cloud.&currency_code=EUR)
 
 ---
 
