@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
+import { StorageAccessFramework } from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import * as Haptics from "expo-haptics";
 import * as SecureStore from "expo-secure-store";
@@ -65,24 +66,34 @@ export default function SettingsScreen() {
       const now = new Date();
       const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
       const filename = `memory-records-backup-${stamp}.json`;
-
       const payload = JSON.stringify({ records, tags: knownTags }, null, 2);
 
-      const fileUri = (FileSystem.cacheDirectory ?? "") + filename;
-      await FileSystem.writeAsStringAsync(fileUri, payload, {
-        encoding: FileSystem.EncodingType?.UTF8 ?? ("utf8" as any),
-      });
-
-      const canShare = await Sharing.isAvailableAsync();
-      if (canShare) {
-        await Sharing.shareAsync(fileUri, {
-          mimeType: "application/json",
-          dialogTitle: "Save Memory Records Backup",
-          UTI: "public.json",
-        });
+      if (Platform.OS === "android") {
+        // Android: use SAF folder picker so the user can save to any location
+        // (Documents, SD card, Drive, etc.) — Sharing.shareAsync only offers apps.
+        const perm = await StorageAccessFramework.requestDirectoryPermissionsAsync();
+        if (!perm.granted) return;
+        const fileUri = await StorageAccessFramework.createFileAsync(
+          perm.directoryUri,
+          filename,
+          "application/json"
+        );
+        await StorageAccessFramework.writeAsStringAsync(fileUri, payload);
+        Alert.alert("Export saved", `${filename} was saved to the folder you selected.`);
       } else {
-        // Fallback for web / unsupported platforms
-        await Share.share({ message: payload, title: "Memory Records Backup" });
+        // iOS / web: share sheet → user taps "Save to Files"
+        const fileUri = (FileSystem.cacheDirectory ?? "") + filename;
+        await FileSystem.writeAsStringAsync(fileUri, payload);
+        const canShare = await Sharing.isAvailableAsync();
+        if (canShare) {
+          await Sharing.shareAsync(fileUri, {
+            mimeType: "application/json",
+            dialogTitle: "Save Memory Records Backup",
+            UTI: "public.json",
+          });
+        } else {
+          await Share.share({ message: payload, title: "Memory Records Backup" });
+        }
       }
     } catch (e) {
       Alert.alert("Export Error", String(e));
