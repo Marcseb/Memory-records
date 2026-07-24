@@ -1,5 +1,5 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { readJsonFile, writeJsonFile } from "@/utils/storage";
 
 export type VoiceLanguage = "fr-FR" | "it-IT" | "en-US";
 
@@ -24,7 +24,8 @@ interface SettingsContextType {
 
 const SettingsContext = createContext<SettingsContextType | null>(null);
 
-const SETTINGS_KEY = "mr_obsidian_settings";
+const SETTINGS_FILE = "mr_settings.json";
+const SETTINGS_LEGACY_KEY = "mr_obsidian_settings";
 
 const DEFAULT_SETTINGS: AppSettings = {
   vaultName: "",
@@ -40,10 +41,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const raw = await AsyncStorage.getItem(SETTINGS_KEY);
-        if (raw) {
-          setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(raw) });
-        }
+        const saved = await readJsonFile<AppSettings>(SETTINGS_FILE, SETTINGS_LEGACY_KEY);
+        if (saved) setSettings({ ...DEFAULT_SETTINGS, ...saved });
       } catch {
         // ignore
       }
@@ -54,7 +53,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     const next = { ...settings, ...updates };
     next.configured = !!next.vaultName.trim();
     setSettings(next);
-    await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
+    await writeJsonFile(SETTINGS_FILE, next);
   };
 
   return (

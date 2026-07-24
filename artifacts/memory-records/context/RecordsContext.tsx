@@ -1,5 +1,5 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { readJsonFile, writeJsonFile, deleteJsonFile } from "@/utils/storage";
 
 export interface MemoryRecord {
   id: string;
@@ -32,8 +32,10 @@ interface RecordsContextType {
 
 const RecordsContext = createContext<RecordsContextType | null>(null);
 
-const RECORDS_KEY = "mr_records";
-const TAGS_KEY = "mr_tags";
+const RECORDS_FILE = "mr_records.json";
+const TAGS_FILE = "mr_tags.json";
+const RECORDS_LEGACY_KEY = "mr_records";
+const TAGS_LEGACY_KEY = "mr_tags";
 
 export function RecordsProvider({ children }: { children: React.ReactNode }) {
   const [records, setRecords] = useState<MemoryRecord[]>([]);
@@ -43,14 +45,8 @@ export function RecordsProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const rawRecords = await AsyncStorage.getItem(RECORDS_KEY);
-        if (rawRecords) {
-          try {
-            setRecords(JSON.parse(rawRecords));
-          } catch (e) {
-            console.warn("[RecordsContext] Failed to parse records:", e);
-          }
-        }
+        const savedRecords = await readJsonFile<MemoryRecord[]>(RECORDS_FILE, RECORDS_LEGACY_KEY);
+        if (savedRecords) setRecords(savedRecords);
       } catch (e) {
         console.warn("[RecordsContext] Failed to load records:", e);
       } finally {
@@ -58,14 +54,8 @@ export function RecordsProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const rawTags = await AsyncStorage.getItem(TAGS_KEY);
-        if (rawTags) {
-          try {
-            setKnownTags(JSON.parse(rawTags));
-          } catch (e) {
-            console.warn("[RecordsContext] Failed to parse tags:", e);
-          }
-        }
+        const savedTags = await readJsonFile<string[]>(TAGS_FILE, TAGS_LEGACY_KEY);
+        if (savedTags) setKnownTags(savedTags);
       } catch (e) {
         console.warn("[RecordsContext] Failed to load tags:", e);
       }
@@ -73,7 +63,7 @@ export function RecordsProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const saveRecords = async (updated: MemoryRecord[]) => {
-    await AsyncStorage.setItem(RECORDS_KEY, JSON.stringify(updated));
+    await writeJsonFile(RECORDS_FILE, updated);
   };
 
   const addRecord = useCallback(async (record: MemoryRecord) => {
@@ -101,17 +91,16 @@ export function RecordsProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const importRecords = useCallback(async (incoming: MemoryRecord[], incomingTags: string[]) => {
-    // Merge: keep existing records not in the import, add/overwrite with incoming
     setRecords((prev) => {
       const existingIds = new Set(incoming.map((r) => r.id));
       const kept = prev.filter((r) => !existingIds.has(r.id));
       const next = [...incoming, ...kept].sort((a, b) => b.createdAt - a.createdAt);
-      AsyncStorage.setItem(RECORDS_KEY, JSON.stringify(next));
+      writeJsonFile(RECORDS_FILE, next);
       return next;
     });
     setKnownTags((prev) => {
       const merged = Array.from(new Set([...prev, ...incomingTags])).sort();
-      AsyncStorage.setItem(TAGS_KEY, JSON.stringify(merged));
+      writeJsonFile(TAGS_FILE, merged);
       return merged;
     });
   }, []);
@@ -122,7 +111,7 @@ export function RecordsProvider({ children }: { children: React.ReactNode }) {
     setKnownTags((prev) => {
       if (prev.includes(normalized)) return prev;
       const next = [...prev, normalized].sort();
-      AsyncStorage.setItem(TAGS_KEY, JSON.stringify(next));
+      writeJsonFile(TAGS_FILE, next);
       return next;
     });
   }, []);
@@ -130,7 +119,7 @@ export function RecordsProvider({ children }: { children: React.ReactNode }) {
   const deleteTag = useCallback(async (tag: string) => {
     setKnownTags((prev) => {
       const next = prev.filter((t) => t !== tag);
-      AsyncStorage.setItem(TAGS_KEY, JSON.stringify(next));
+      writeJsonFile(TAGS_FILE, next);
       return next;
     });
   }, []);

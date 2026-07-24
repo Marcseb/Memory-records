@@ -487,13 +487,13 @@ function updateManifests(manifests, timestamp, baseUrl, assetsByHash) {
     manifest.extra.expoGo.debuggerHost = hostBase;
     manifest.extra.expoGo.packagerOpts.dev = false;
 
-    // Pin the experience identity so AsyncStorage is preserved across deployments
+    // Pin the experience identity so Expo Go sees the same experience each time.
+    // Both fields must ALWAYS be overridden — Metro generates a fresh random
+    // currentProjectId on every build, which would silently create a new
+    // AsyncStorage namespace in Expo Go and make all previous data invisible.
     if (manifest.extra.expoClient) {
       manifest.extra.expoClient.originalFullName = STABLE_EXPERIENCE_ID;
-      if (!manifest.extra.expoClient.currentProjectId) {
-        // Use a deterministic pseudo-ID so Expo Go sees the same experience each time
-        manifest.extra.expoClient.currentProjectId = `00000000-0000-0000-0000-${Buffer.from(appSlug).toString("hex").slice(0, 12)}`;
-      }
+      manifest.extra.expoClient.currentProjectId = `00000000-0000-0000-0000-${Buffer.from(appSlug).toString("hex").slice(0, 12)}`;
     }
 
     if (manifest.assets && manifest.assets.length > 0) {

@@ -1,5 +1,5 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import React, { createContext, useContext, useEffect, useState } from "react";
+import { readJsonFile, writeJsonFile, deleteJsonFile } from "@/utils/storage";
 
 interface User {
   username: string;
@@ -14,7 +14,8 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const IDENTITY_KEY = "mr_identity";
+const IDENTITY_FILE = "mr_identity.json";
+const IDENTITY_LEGACY_KEY = "mr_identity";
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -23,17 +24,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     (async () => {
       try {
-        const raw = await AsyncStorage.getItem(IDENTITY_KEY);
-        if (raw) {
-          setUser(JSON.parse(raw));
-        } else {
-          const identity: User = {
+        let identity = await readJsonFile<User>(IDENTITY_FILE, IDENTITY_LEGACY_KEY);
+        if (!identity) {
+          identity = {
             username: "local",
             token: Date.now().toString() + Math.random().toString(36).slice(2, 9),
           };
-          await AsyncStorage.setItem(IDENTITY_KEY, JSON.stringify(identity));
-          setUser(identity);
+          await writeJsonFile(IDENTITY_FILE, identity);
         }
+        setUser(identity);
       } catch {
         setUser({ username: "local", token: "fallback" });
       } finally {
@@ -43,19 +42,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const resetAllData = async () => {
-    await AsyncStorage.multiRemove([
-      IDENTITY_KEY,
-      "mr_records",
-      "mr_tags",
-      "mr_obsidian_settings",
-      "mr_session",
-      "mr_users",
+    await Promise.all([
+      deleteJsonFile(IDENTITY_FILE),
+      deleteJsonFile("mr_records.json"),
+      deleteJsonFile("mr_tags.json"),
+      deleteJsonFile("mr_settings.json"),
     ]);
     const identity: User = {
       username: "local",
       token: Date.now().toString() + Math.random().toString(36).slice(2, 9),
     };
-    await AsyncStorage.setItem(IDENTITY_KEY, JSON.stringify(identity));
+    await writeJsonFile(IDENTITY_FILE, identity);
     setUser(identity);
   };
 
