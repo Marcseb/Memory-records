@@ -204,6 +204,30 @@ export default function HelpScreen() {
           <Bullet>
             <Text style={s.strong}>Tags</Text> — add one or more tags to organise memories by theme, person, or place. Tags are shared across all records and manageable in Settings.
           </Bullet>
+          <Bullet>
+            <Text style={s.strong}>Emotion tags</Text> — attach one of 22 colour-coded emotions (joy, nostalgia, gratitude, grief, …) to each memory. Emotions appear on the record card and can be used to group and filter the home list.
+          </Bullet>
+          <Bullet>
+            <Text style={s.strong}>Memory Year</Text> — optionally record the year the memory is from (e.g. 1998), independently of today's date. Useful when journaling old photos or past events. Used for chronological sorting.
+          </Bullet>
+        </Section>
+
+        <Section icon="list" title="Sorting & browsing">
+          <Bullet>
+            The home list offers four sort modes, toggled with the pill bar at the top of the screen.
+          </Bullet>
+          <Bullet>
+            <Text style={s.strong}>Tag</Text> — grouped by primary tag, collapsed or expanded per group.
+          </Bullet>
+          <Bullet>
+            <Text style={s.strong}>Emotion</Text> — grouped by emotion, each group shown in its colour.
+          </Bullet>
+          <Bullet>
+            <Text style={s.strong}>Added</Text> — flat list, newest-added first (by when the record was created in the app).
+          </Bullet>
+          <Bullet>
+            <Text style={s.strong}>Date</Text> — flat list sorted by Memory Year, most recent first. Records without a year appear at the bottom.
+          </Bullet>
         </Section>
 
         <Section icon="cpu" title="AI Interviewer">
@@ -237,19 +261,19 @@ export default function HelpScreen() {
           </Bullet>
           <View style={{ height: 10 }} />
           <InfoBox>
-            Each note includes the date, year, tags, GPS coordinates, location name, and your full text. Notes are formatted in Markdown and are fully readable and searchable inside Obsidian.
+            Each note includes the date, memory year, tags, emotion, photo path, GPS coordinates, location name, and your full text. Notes are formatted in Markdown and are fully readable and searchable inside Obsidian.{"\n\n"}
+            <Text style={{ fontFamily: "Inter_600SemiBold" }}>Import from Obsidian</Text> — if you have previously saved notes to Obsidian, you can reimport them. A file picker lets you select one or more .md files from your vault.{"\n"}
+            • Android / Samsung: tap the <Text style={{ fontFamily: "Inter_600SemiBold" }}>☰ menu → Internal storage</Text>, then find <Text style={{ fontFamily: "Inter_600SemiBold" }}>Obsidian → [vault] → Memory Records</Text>.{"\n"}
+            • iPhone: tap <Text style={{ fontFamily: "Inter_600SemiBold" }}>Browse → On My iPhone → Obsidian</Text> (or iCloud Drive → Obsidian).
           </InfoBox>
         </Section>
 
         <Section icon="archive" title="Backup & restore">
           <Bullet>
-            <Text style={s.strong}>JSON export</Text> — tap Export in Settings to share a complete backup of all your records and tags as a JSON file. Save it to your Files app, iCloud, Google Drive, or send it anywhere via the share sheet.
+            <Text style={s.strong}>JSON export</Text> — tap Export in Settings. On Android a folder picker opens so you can save directly to Documents, Downloads, or Google Drive. On iPhone the share sheet appears with "Save to Files". The file is named <Text style={s.strong}>memory-records-backup-YYYY-MM-DD.json</Text> and is human-readable. Photo references are saved as local file paths, not embedded image data.
           </Bullet>
           <Bullet>
-            <Text style={s.strong}>JSON import</Text> — paste a JSON backup into the Import panel. Records are merged with existing ones — nothing is deleted. Duplicates are avoided by ID.
-          </Bullet>
-          <Bullet>
-            <Text style={s.strong}>Import from Obsidian</Text> — if you have previously saved notes to Obsidian, you can reimport them. On Android, pick the vault folder directly; on iOS, use the Files app to select individual Markdown files. The app recognises and parses the Memory Records note format automatically.
+            <Text style={s.strong}>JSON import</Text> — in the Import panel, tap <Text style={s.strong}>Pick JSON file</Text> to select a backup directly from your device, or paste the JSON text manually. Records are merged with existing ones — nothing is deleted. Duplicates are avoided by ID.
           </Bullet>
           <View style={{ height: 10 }} />
           <InfoBox>
@@ -259,7 +283,7 @@ export default function HelpScreen() {
 
         <Section icon="shield" title="Privacy & security">
           <Bullet>
-            <Text style={s.strong}>All data stays on your device.</Text> Records, photos, tags, and settings are stored in your phone's local storage (AsyncStorage). Nothing is uploaded to any server.
+            <Text style={s.strong}>All data stays on your device.</Text> Records, photos, tags, and settings are stored as JSON files in your phone's local document directory. Nothing is uploaded to any server.
           </Bullet>
           <Bullet>
             <Text style={s.strong}>Encrypted key storage.</Text> Your AI API keys are stored using the device's secure enclave (expo-secure-store), the same mechanism used by banking apps. They are never written to plain storage.
@@ -391,7 +415,7 @@ export default function HelpScreen() {
 
         <View style={s.divider} />
 
-        <Text style={s.footerNote}>Memory Records v1.0{"\n"}Built with Expo · All data local · No tracking</Text>
+        <Text style={s.footerNote}>Memory Records v1.1{"\n"}Built with Expo · All data local · No tracking</Text>
       </ScrollView>
     </View>
   );

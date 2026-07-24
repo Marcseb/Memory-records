@@ -49,7 +49,7 @@ Open the **Home** tab and tap **+**:
 
 1. Pick a photo from your gallery — the app reads its EXIF data automatically (date, GPS, location name).
 2. Add a text note, or tap the microphone to dictate hands-free.
-3. Optionally add tags to organise the memory.
+3. Add tags to organise the memory, select an emotion tag, and optionally enter the Memory Year (the year the memory is from, if different from today).
 4. Tap **Save**.
 
 Your memory is stored locally, instantly, with no upload.
@@ -63,6 +63,23 @@ Your memory is stored locally, instantly, with no upload.
 - **Text-only note** — write a note without any photo; useful for thoughts or conversations.
 - **Voice-to-text** — dictate your note hands-free. Speech recognition runs on-device in French, Italian, or English.
 - **Tags** — add one or more tags per memory to organise by theme, person, or place. Tags are manageable in Settings.
+- **Emotion tags** — attach one of 22 colour-coded emotions (joy, nostalgia, gratitude, grief, etc.) to each memory. Used for grouping and filtering in the home list.
+- **Memory Year** — optionally record the year the memory is from (e.g. 1998), independently of today's date. Used for chronological sorting.
+
+---
+
+## Sorting & browsing
+
+The home list offers four sort modes, toggled with the pill bar at the top:
+
+| Mode | Description |
+|---|---|
+| **Tag** | Grouped by primary tag (folder-style) |
+| **Emotion** | Grouped by emotion, alphabetically |
+| **Added** | Flat list, newest-added first |
+| **Date** | Flat list, most recent Memory Year first |
+
+Groups (Tag and Emotion modes) can be collapsed individually by tapping their header.
 
 ---
 
@@ -91,15 +108,15 @@ Memory Records can save notes directly into your **Obsidian vault** as Markdown 
 
 > Both Obsidian and Memory Records must be installed on the same device. The app opens Obsidian via a deep link — no Wi-Fi or server needed.
 
-Each saved note includes the date, year, tags, GPS coordinates, location name, and your full text, formatted in Markdown and fully searchable inside Obsidian.
+Each saved note includes the date, memory year, tags, emotion, photo path, GPS coordinates, location name, and your full text, formatted in Markdown and fully searchable inside Obsidian.
 
 ---
 
 ## Backup & restore
 
-- **JSON export** — tap Export in Settings to share a complete backup of all records and tags as a JSON file. Save it to Files, iCloud, Google Drive, or anywhere via the share sheet.
-- **JSON import** — paste a JSON backup into the Import panel. Records are merged with existing ones; duplicates are avoided by ID.
-- **Import from Obsidian** — reimport previously saved Memory Records notes from your vault. On Android, pick the vault folder directly; on iOS, use the Files app to select individual Markdown files.
+- **JSON export** — tap Export in Settings. On **Android** a folder picker opens so you can save directly to Documents, Downloads, an SD card folder, or Google Drive. On **iOS** the share sheet appears with a "Save to Files" option. The file is named `memory-records-backup-YYYY-MM-DD.json` and contains all records and tags in a readable, pretty-printed format. Photo references are stored as local file paths (not embedded image data).
+- **JSON import** — in the Import panel, either tap **Pick JSON file** to select a backup file directly from your device, or paste the JSON text manually. Records are merged with existing ones; duplicates are avoided by ID.
+- **Import from Obsidian** — reimport previously saved Memory Records notes from your vault. On both Android and iOS, a file picker lets you navigate to your vault folder and select one or more `.md` files. Android users: in the picker, tap the **☰ menu → Internal storage**, then find `Obsidian → [vault] → Memory Records`.
 
 > Regular JSON exports are the recommended backup strategy. If you reinstall the app or change device, a JSON backup lets you restore everything instantly.
 
@@ -138,7 +155,7 @@ Scan the QR code shown in the terminal with Expo Go.
 
 ## Privacy & security
 
-- **All data stays on your device.** Records, photos, tags, and settings are stored in your phone's local storage (AsyncStorage). Nothing is uploaded to any server.
+- **All data stays on your device.** Records, photos, tags, and settings are stored as JSON files in your phone's local document directory (`FileSystem.documentDirectory`). Nothing is uploaded to any server.
 - **Encrypted key storage.** AI API keys are stored using the device's secure enclave (expo-secure-store), the same mechanism used by banking apps. They are never written to plain storage.
 - **Local authentication.** Your login credentials are stored locally on this device and are never sent to a remote server.
 - **AI calls are direct.** When the AI Interviewer is active, your messages go directly from your device to Mistral or OpenAI using your own key — no intermediary server reads them.
@@ -152,7 +169,7 @@ Scan the QR code shown in the terminal with Expo Go.
 |---|---|
 | Mobile app | Expo SDK 54 / React Native |
 | Routing | expo-router |
-| Local storage | AsyncStorage |
+| Local storage | FileSystem.documentDirectory (expo-file-system/legacy) |
 | Secure storage | expo-secure-store (device secure enclave) |
 | AI | Mistral AI (primary) / OpenAI (fallback) |
 | Obsidian | Actions URI deep link |
@@ -166,9 +183,11 @@ artifacts/memory-records/   ← Expo app
     new-record.tsx          ← New memory creation
     record/[id].tsx         ← Memory detail view
     help.tsx                ← Help & features guide
-  components/               ← Shared UI components
+  components/               ← Shared UI components (EmotionPicker, RecordCard, …)
+  constants/                ← Emotion definitions (22 emotions with colours)
   context/                  ← Auth, Records, Settings providers
-  hooks/                    ← useInterview, useColors, …
+  hooks/                    ← useInterview, useObsidian, useColors, …
+  utils/                    ← obsidianParser, storage (FileSystem wrapper)
 artifacts/api-server/       ← Express API server (TypeScript)
 lib/                        ← Shared TypeScript libraries
 ```
