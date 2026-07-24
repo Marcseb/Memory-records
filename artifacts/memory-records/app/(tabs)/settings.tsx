@@ -872,7 +872,10 @@ export default function SettingsScreen() {
           <View style={s.infoBox}>
             <Text style={s.infoText}>
               Export saves all your records and tags as a JSON file you can store anywhere. Import merges a backup back in without deleting existing records.{"\n\n"}
-              <Text style={{ fontFamily: "Inter_600SemiBold" }}>Import from Obsidian</Text> opens a folder picker — navigate to your vault's Memory Records folder to import all notes at once.
+              <Text style={{ fontFamily: "Inter_600SemiBold" }}>Import from Obsidian</Text> opens the iOS Files app — the app cannot navigate there automatically. Tap{" "}
+              <Text style={{ fontFamily: "Inter_600SemiBold" }}>Browse</Text>, then go to{" "}
+              <Text style={{ fontFamily: "Inter_600SemiBold" }}>On My iPhone → Obsidian → [your vault] → Memory Records</Text>{" "}
+              (or <Text style={{ fontFamily: "Inter_600SemiBold" }}>iCloud Drive → Obsidian</Text> if you use iCloud sync). Select one or more .md files to import.
             </Text>
           </View>
           <View style={s.card}>

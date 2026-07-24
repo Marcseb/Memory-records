@@ -464,6 +464,12 @@ function updateBundleUrls(timestamp, baseUrl) {
 }
 
 function updateManifests(manifests, timestamp, baseUrl, assetsByHash) {
+  // Stable experience ID derived from the app slug — must NOT change between
+  // deployments, otherwise Expo Go treats each build as a new experience and
+  // loses all locally-stored AsyncStorage data.
+  const appSlug = "memory-records";
+  const STABLE_EXPERIENCE_ID = `@${appSlug}/${appSlug}`;
+
   const updateForPlatform = (platform, manifest) => {
     if (!manifest.launchAsset || !manifest.extra) {
       exitWithError(`Malformed manifest for ${platform}`);
@@ -480,6 +486,15 @@ function updateManifests(manifests, timestamp, baseUrl, assetsByHash) {
     manifest.extra.expoClient.hostUri = hostBase;
     manifest.extra.expoGo.debuggerHost = hostBase;
     manifest.extra.expoGo.packagerOpts.dev = false;
+
+    // Pin the experience identity so AsyncStorage is preserved across deployments
+    if (manifest.extra.expoClient) {
+      manifest.extra.expoClient.originalFullName = STABLE_EXPERIENCE_ID;
+      if (!manifest.extra.expoClient.currentProjectId) {
+        // Use a deterministic pseudo-ID so Expo Go sees the same experience each time
+        manifest.extra.expoClient.currentProjectId = `00000000-0000-0000-0000-${Buffer.from(appSlug).toString("hex").slice(0, 12)}`;
+      }
+    }
 
     if (manifest.assets && manifest.assets.length > 0) {
       manifest.assets.forEach((asset) => {
