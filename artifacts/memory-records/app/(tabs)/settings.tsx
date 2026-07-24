@@ -72,50 +72,73 @@ export default function SettingsScreen() {
     }
   };
 
+  const processImportText = async (text: string) => {
+    let incoming: MemoryRecord[];
+    let incomingTags: string[] = [];
+
+    if (isObsidianMarkdown(text) || (text.includes("**Date:**") && text.includes("## Note"))) {
+      const parsed = parseMultipleObsidianNotes(text);
+      if (parsed.length === 0) {
+        const single = parseObsidianNote(text);
+        if (!single) throw new Error("Could not find a valid Memory Records note in this text.");
+        parsed.push(single);
+      }
+      incoming = parsed.map((r) => ({
+        ...r,
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 9),
+      })) as MemoryRecord[];
+      incomingTags = Array.from(new Set(incoming.flatMap((r) => r.tags ?? [])));
+    } else {
+      const parsedJson = JSON.parse(text);
+      const rawRecords: MemoryRecord[] = Array.isArray(parsedJson)
+        ? parsedJson
+        : Array.isArray(parsedJson?.records)
+        ? parsedJson.records
+        : null;
+      incomingTags = Array.isArray(parsedJson?.tags) ? parsedJson.tags : [];
+      if (!rawRecords) throw new Error("JSON does not contain a valid records array.");
+      incoming = rawRecords.filter(
+        (r) => r && typeof r.id === "string" && typeof r.note === "string"
+      );
+      if (incoming.length === 0) throw new Error("No valid records found in the backup.");
+    }
+
+    await importRecords(incoming, incomingTags);
+    if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    return incoming.length;
+  };
+
   const handleImportConfirm = async () => {
     Keyboard.dismiss();
     setImporting(true);
     try {
-      const text = importText.trim();
-      let incoming: MemoryRecord[];
-      let incomingTags: string[] = [];
-
-      if (isObsidianMarkdown(text) || (text.includes("**Date:**") && text.includes("## Note"))) {
-        // Obsidian Markdown paste — may contain one or several notes
-        const parsed = parseMultipleObsidianNotes(text);
-        if (parsed.length === 0) {
-          const single = parseObsidianNote(text);
-          if (!single) throw new Error("Could not find a valid Memory Records note in this text.");
-          parsed.push(single);
-        }
-        incoming = parsed.map((r) => ({
-          ...r,
-          id: Date.now().toString(36) + Math.random().toString(36).slice(2, 9),
-        })) as MemoryRecord[];
-        incomingTags = Array.from(new Set(incoming.flatMap((r) => r.tags ?? [])));
-      } else {
-        // JSON backup
-        const parsedJson = JSON.parse(text);
-        const rawRecords: MemoryRecord[] = Array.isArray(parsedJson)
-          ? parsedJson
-          : Array.isArray(parsedJson?.records)
-          ? parsedJson.records
-          : null;
-        incomingTags = Array.isArray(parsedJson?.tags) ? parsedJson.tags : [];
-        if (!rawRecords) throw new Error("JSON does not contain a valid records array.");
-        incoming = rawRecords.filter(
-          (r) => r && typeof r.id === "string" && typeof r.note === "string"
-        );
-        if (incoming.length === 0) throw new Error("No valid records found in the backup.");
-      }
-
-      await importRecords(incoming, incomingTags);
-      if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const count = await processImportText(importText.trim());
       setImportModalVisible(false);
       setImportText("");
-      Alert.alert("Import Complete", `${incoming.length} record${incoming.length !== 1 ? "s" : ""} restored.`);
+      Alert.alert("Import Complete", `${count} record${count !== 1 ? "s" : ""} restored.`);
     } catch (e) {
       Alert.alert("Import Failed", `Could not parse the pasted content:\n${String(e)}`);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handlePickJsonFile = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ["application/json", "text/plain", "text/json", "*/*"],
+        multiple: false,
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || result.assets.length === 0) return;
+      setImporting(true);
+      const content = await readFileContent(result.assets[0].uri);
+      const count = await processImportText(content.trim());
+      setImportModalVisible(false);
+      setImportText("");
+      Alert.alert("Import Complete", `${count} record${count !== 1 ? "s" : ""} restored.`);
+    } catch (e) {
+      Alert.alert("Import Failed", `Could not read the file:\n${String(e)}`);
     } finally {
       setImporting(false);
     }
@@ -577,8 +600,39 @@ export default function SettingsScreen() {
             <View style={s.modalHandle} />
             <Text style={s.modalTitle}>Import Backup</Text>
             <Text style={s.modalHint}>
-              Paste either a JSON backup or the raw text of one or more Obsidian notes exported by this app. The format is detected automatically. Records are merged — nothing is deleted.
+              Pick your JSON backup file, or paste JSON / Obsidian note text below. Format is detected automatically — records are merged, nothing is deleted.
             </Text>
+
+            {/* Primary action: pick file */}
+            <Pressable
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                backgroundColor: colors.primary,
+                borderRadius: colors.radius,
+                paddingVertical: 12,
+                opacity: importing ? 0.6 : 1,
+              }}
+              onPress={handlePickJsonFile}
+              disabled={importing}
+            >
+              <Feather name="file" size={16} color={colors.primaryForeground} />
+              <Text style={{ fontSize: 15, fontFamily: "Inter_600SemiBold", color: colors.primaryForeground }}>
+                {importing ? "Importing…" : "Pick JSON file"}
+              </Text>
+            </Pressable>
+
+            {/* Divider */}
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+              <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
+                or paste text
+              </Text>
+              <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+            </View>
+
             <TextInput
               style={[s.importInput, { color: colors.foreground, borderColor: colors.border }]}
               placeholder={"Paste JSON backup or Obsidian note text here…"}
@@ -598,12 +652,12 @@ export default function SettingsScreen() {
                 <Text style={[s.modalBtnText, { color: colors.foreground }]}>Cancel</Text>
               </Pressable>
               <Pressable
-                style={[s.modalBtn, { backgroundColor: colors.primary, opacity: importing ? 0.6 : 1 }]}
+                style={[s.modalBtn, { backgroundColor: colors.primary, opacity: (importing || importText.trim().length === 0) ? 0.4 : 1 }]}
                 onPress={handleImportConfirm}
                 disabled={importing || importText.trim().length === 0}
               >
                 <Text style={[s.modalBtnText, { color: colors.primaryForeground }]}>
-                  {importing ? "Importing…" : "Import"}
+                  {importing ? "Importing…" : "Import text"}
                 </Text>
               </Pressable>
             </View>
