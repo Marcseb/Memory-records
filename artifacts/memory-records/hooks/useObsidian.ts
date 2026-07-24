@@ -61,6 +61,7 @@ function formatMarkdown(record: MemoryRecord, authorName?: string): string {
   if (record.tags && record.tags.length > 0) {
     lines.push(`**Tags:** ${record.tags.map((t) => `#${t}`).join("  ")}`);
   }
+  if (record.emotion) lines.push(`**Emotion:** ${record.emotion}`);
   if (record.location) lines.push(`**Location:** ${record.location}`);
   if (record.lat && record.lng) {
     lines.push(`**Coordinates:** ${record.lat.toFixed(5)}, ${record.lng.toFixed(5)}`);

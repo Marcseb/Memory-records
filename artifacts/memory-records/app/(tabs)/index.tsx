@@ -155,7 +155,14 @@ export default function HomeScreen() {
 
     if (sortMode === "note-date") {
       return [...records]
-        .sort((a, b) => b.date.localeCompare(a.date))
+        .sort((a, b) => {
+          // Compare by note/photo date (YYYY-MM-DD). Use createdAt as tiebreaker
+          // so same-day notes are ordered by when they were added, not arbitrarily.
+          const dateA = a.date ? new Date(a.date).getTime() : 0;
+          const dateB = b.date ? new Date(b.date).getTime() : 0;
+          if (dateB !== dateA) return dateB - dateA;
+          return b.createdAt - a.createdAt;
+        })
         .map((record) => ({ type: "record" as const, record }));
     }
 

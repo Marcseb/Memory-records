@@ -67,6 +67,9 @@ export function parseObsidianNote(
     if (tags.length > 0) record.tags = tags;
   }
 
+  const emotion = extractField(text, "Emotion");
+  if (emotion) record.emotion = emotion;
+
   const location = extractField(text, "Location");
   if (location) record.location = location;
 
