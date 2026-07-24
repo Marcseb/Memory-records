@@ -2,7 +2,6 @@ import { Feather } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
-import { StorageAccessFramework } from "expo-file-system/legacy";
 import * as Haptics from "expo-haptics";
 import * as SecureStore from "expo-secure-store";
 import React, { useEffect, useState } from "react";
@@ -226,48 +225,20 @@ export default function SettingsScreen() {
 
   const handleObsidianImport = async () => {
     try {
-      if (Platform.OS === "android") {
-        // Android: use folder picker (opens file browser, not "Recent")
-        const perm = await StorageAccessFramework.requestDirectoryPermissionsAsync();
-        if (!perm.granted) return;
+      // Use DocumentPicker on all platforms — consistent, reliable, and works
+      // correctly on Samsung Galaxy where the SAF folder picker was resetting
+      // its remembered location on each new deployment.
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ["text/markdown", "text/plain", "application/octet-stream", "*/*"],
+        multiple: true,
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || result.assets.length === 0) return;
 
-        const allUris = await StorageAccessFramework.readDirectoryAsync(perm.directoryUri);
-
-        // Filter to .md files — SAF URIs encode the path so we URL-decode first
-        const mdUris = allUris.filter((uri) => {
-          try {
-            return decodeURIComponent(uri).toLowerCase().endsWith(".md");
-          } catch {
-            return uri.toLowerCase().includes(".md");
-          }
-        });
-
-        if (mdUris.length === 0) {
-          Alert.alert(
-            "No .md files found",
-            "The selected folder contains no Markdown files. Navigate to the folder inside your Obsidian vault that contains the Memory Records notes (e.g. Obsidian → YourVault → Memory Records)."
-          );
-          return;
-        }
-
-        const { parsed, readErrors, parseErrors } = await processUris(
-          mdUris.map((uri) => ({ uri }))
-        );
-        await finishImport(parsed, readErrors, parseErrors);
-      } else {
-        // iOS / web: standard file picker (Files app, supports vault via iCloud)
-        const result = await DocumentPicker.getDocumentAsync({
-          type: ["text/markdown", "text/plain", "application/octet-stream", "*/*"],
-          multiple: true,
-          copyToCacheDirectory: true,
-        });
-        if (result.canceled || result.assets.length === 0) return;
-
-        const { parsed, readErrors, parseErrors } = await processUris(
-          result.assets.map((a) => ({ uri: a.uri, name: a.name ?? undefined }))
-        );
-        await finishImport(parsed, readErrors, parseErrors);
-      }
+      const { parsed, readErrors, parseErrors } = await processUris(
+        result.assets.map((a) => ({ uri: a.uri, name: a.name ?? undefined }))
+      );
+      await finishImport(parsed, readErrors, parseErrors);
     } catch (e) {
       Alert.alert("Import Error", String(e));
     }
@@ -872,10 +843,12 @@ export default function SettingsScreen() {
           <View style={s.infoBox}>
             <Text style={s.infoText}>
               Export saves all your records and tags as a JSON file you can store anywhere. Import merges a backup back in without deleting existing records.{"\n\n"}
-              <Text style={{ fontFamily: "Inter_600SemiBold" }}>Import from Obsidian</Text> opens the iOS Files app — the app cannot navigate there automatically. Tap{" "}
-              <Text style={{ fontFamily: "Inter_600SemiBold" }}>Browse</Text>, then go to{" "}
-              <Text style={{ fontFamily: "Inter_600SemiBold" }}>On My iPhone → Obsidian → [your vault] → Memory Records</Text>{" "}
-              (or <Text style={{ fontFamily: "Inter_600SemiBold" }}>iCloud Drive → Obsidian</Text> if you use iCloud sync). Select one or more .md files to import.
+              <Text style={{ fontFamily: "Inter_600SemiBold" }}>Import from Obsidian</Text> opens a file picker — navigate to your Obsidian vault folder and select one or more .md files.{"\n"}
+              • Android / Samsung: tap the{" "}
+              <Text style={{ fontFamily: "Inter_600SemiBold" }}>☰ menu → Internal storage</Text>, then find{" "}
+              <Text style={{ fontFamily: "Inter_600SemiBold" }}>Obsidian → [vault] → Memory Records</Text>.{"\n"}
+              • iPhone: tap <Text style={{ fontFamily: "Inter_600SemiBold" }}>Browse → On My iPhone → Obsidian</Text>{" "}
+              (or <Text style={{ fontFamily: "Inter_600SemiBold" }}>iCloud Drive → Obsidian</Text>).
             </Text>
           </View>
           <View style={s.card}>
