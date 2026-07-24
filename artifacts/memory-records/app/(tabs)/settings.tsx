@@ -2,6 +2,7 @@ import { Feather } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
+import * as Sharing from "expo-sharing";
 import * as Haptics from "expo-haptics";
 import * as SecureStore from "expo-secure-store";
 import React, { useEffect, useState } from "react";
@@ -61,11 +62,28 @@ export default function SettingsScreen() {
 
   const handleExport = async () => {
     try {
+      const now = new Date();
+      const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      const filename = `memory-records-backup-${stamp}.json`;
+
       const payload = JSON.stringify({ records, tags: knownTags }, null, 2);
-      await Share.share({
-        message: payload,
-        title: "Memory Records Backup",
+
+      const fileUri = (FileSystem.cacheDirectory ?? "") + filename;
+      await FileSystem.writeAsStringAsync(fileUri, payload, {
+        encoding: FileSystem.EncodingType?.UTF8 ?? ("utf8" as any),
       });
+
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: "application/json",
+          dialogTitle: "Save Memory Records Backup",
+          UTI: "public.json",
+        });
+      } else {
+        // Fallback for web / unsupported platforms
+        await Share.share({ message: payload, title: "Memory Records Backup" });
+      }
     } catch (e) {
       Alert.alert("Export Error", String(e));
     }
