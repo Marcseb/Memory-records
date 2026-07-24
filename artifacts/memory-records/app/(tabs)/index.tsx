@@ -156,11 +156,12 @@ export default function HomeScreen() {
     if (sortMode === "note-date") {
       return [...records]
         .sort((a, b) => {
-          // Compare by note/photo date (YYYY-MM-DD). Use createdAt as tiebreaker
-          // so same-day notes are ordered by when they were added, not arbitrarily.
-          const dateA = a.date ? new Date(a.date).getTime() : 0;
-          const dateB = b.date ? new Date(b.date).getTime() : 0;
-          if (dateB !== dateA) return dateB - dateA;
+          // Sort by the Memory Year the user entered (contextYear).
+          // Records without a year go to the bottom; use createdAt as tiebreaker
+          // within the same year so the order is always deterministic.
+          const yA = a.contextYear ?? -Infinity;
+          const yB = b.contextYear ?? -Infinity;
+          if (yB !== yA) return yB - yA;
           return b.createdAt - a.createdAt;
         })
         .map((record) => ({ type: "record" as const, record }));
