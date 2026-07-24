@@ -67,6 +67,9 @@ export function parseObsidianNote(
     if (tags.length > 0) record.tags = tags;
   }
 
+  const photo = extractField(text, "Photo");
+  if (photo) record.imageUri = photo;
+
   const emotion = extractField(text, "Emotion");
   if (emotion) record.emotion = emotion;
 

@@ -55,6 +55,7 @@ function formatMarkdown(record: MemoryRecord, authorName?: string): string {
   const lines: string[] = [];
 
   lines.push(`**Date:** ${record.date}`);
+  if (record.imageUri) lines.push(`**Photo:** ${record.imageUri}`);
   if (record.contextYear !== undefined) {
     lines.push(`**Memory year:** ${record.contextYear}`);
   }
