@@ -92,7 +92,8 @@ export default function RecordDetailScreen() {
     const yearChanged = editedYear !== record.contextYear;
     const primaryTagChanged = editedTags[0] !== record.tags?.[0];
     const tagsChanged = JSON.stringify(editedTags) !== JSON.stringify(record.tags ?? []);
-    if (trimmed === record.note && !yearChanged && !tagsChanged) {
+    const emotionChanged = editedEmotion !== (record.emotion ?? "neutral");
+    if (trimmed === record.note && !yearChanged && !tagsChanged && !emotionChanged) {
       setIsEditing(false);
       return;
     }
