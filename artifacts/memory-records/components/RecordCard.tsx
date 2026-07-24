@@ -6,6 +6,7 @@ import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { MemoryRecord } from "@/context/RecordsContext";
 import { useColors } from "@/hooks/useColors";
+import { getEmotion } from "@/constants/emotions";
 
 interface Props {
   record: MemoryRecord;
@@ -40,6 +41,9 @@ export function RecordCard({ record, onPress, onDelete, onAddPhoto }: Props) {
     if (Platform.OS !== "web") await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     onDelete();
   };
+
+  const emotion = getEmotion(record.emotion);
+  const showEmotion = emotion.key !== "neutral";
 
   const s = StyleSheet.create({
     card: {
@@ -97,6 +101,7 @@ export function RecordCard({ record, onPress, onDelete, onAddPhoto }: Props) {
       alignItems: "center",
       gap: 4,
       marginTop: 2,
+      flexWrap: "wrap",
     },
     metaText: {
       fontSize: 12,
@@ -113,6 +118,18 @@ export function RecordCard({ record, onPress, onDelete, onAddPhoto }: Props) {
       fontSize: 10,
       fontFamily: "Inter_600SemiBold",
       color: colors.success,
+    },
+    emotionDot: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      borderRadius: 10,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+    },
+    emotionDotText: {
+      fontSize: 10,
+      fontFamily: "Inter_500Medium",
     },
     deleteBtn: {
       position: "absolute",
@@ -179,6 +196,12 @@ export function RecordCard({ record, onPress, onDelete, onAddPhoto }: Props) {
           {record.tags && record.tags.length > 2 ? (
             <Text style={[s.badgeText, { color: colors.mutedForeground }]}>+{record.tags.length - 2}</Text>
           ) : null}
+          {showEmotion && (
+            <View style={[s.emotionDot, { backgroundColor: emotion.color + "22" }]}>
+              <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: emotion.color }} />
+              <Text style={[s.emotionDotText, { color: emotion.color }]}>{emotion.label}</Text>
+            </View>
+          )}
           {record.location ? (
             <>
               <Feather name="map-pin" size={11} color={colors.mutedForeground} />

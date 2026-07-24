@@ -19,12 +19,14 @@ import { useRecords } from "@/context/RecordsContext";
 import { useSettings } from "@/context/SettingsContext";
 import { useObsidian } from "@/hooks/useObsidian";
 import { useColors } from "@/hooks/useColors";
+import { EmotionPicker } from "@/components/EmotionPicker";
+import { getEmotion } from "@/constants/emotions";
 
 export default function RecordDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { records, updateRecord, deleteRecord } = useRecords();
+  const { records, updateRecord, deleteRecord, knownTags } = useRecords();
   const { settings } = useSettings();
   const { saveToObsidian } = useObsidian();
   const [saving, setSaving] = useState(false);
@@ -35,6 +37,7 @@ export default function RecordDetailScreen() {
   const [yearInputText, setYearInputText] = useState("");
   const yearInputRef = useRef<TextInput>(null);
   const [editedTags, setEditedTags] = useState<string[]>([]);
+  const [editedEmotion, setEditedEmotion] = useState("neutral");
   const editInputRef = useRef<TextInput>(null);
   const currentYear = new Date().getFullYear();
 
@@ -61,6 +64,7 @@ export default function RecordDetailScreen() {
     setEditedNote(record.note ?? "");
     setEditedYear(record.contextYear);
     setEditedTags(record.tags ?? []);
+    setEditedEmotion(record.emotion ?? "neutral");
     setIsEditing(true);
     setTimeout(() => editInputRef.current?.focus(), 100);
   };
@@ -70,6 +74,7 @@ export default function RecordDetailScreen() {
     setEditedNote("");
     setEditedYear(undefined);
     setEditedTags([]);
+    setEditedEmotion("neutral");
   };
 
   // Promote a tag to position 0 (primary); others keep their relative order.
@@ -95,9 +100,9 @@ export default function RecordDetailScreen() {
 
     const newTags = editedTags.length > 0 ? editedTags : undefined;
     const newEditCount = (record.editCount ?? 0) + 1;
-    const updatedRecord = { ...record, note: trimmed, contextYear: editedYear, tags: newTags, editCount: newEditCount };
+    const updatedRecord = { ...record, note: trimmed, contextYear: editedYear, tags: newTags, emotion: editedEmotion, editCount: newEditCount };
 
-    await updateRecord(record.id, { note: trimmed, contextYear: editedYear, tags: newTags, editCount: newEditCount });
+    await updateRecord(record.id, { note: trimmed, contextYear: editedYear, tags: newTags, emotion: editedEmotion, editCount: newEditCount });
     setIsEditing(false);
     setEditedNote("");
     setEditedTags([]);
@@ -596,6 +601,16 @@ export default function RecordDetailScreen() {
                 <Text style={s.metaValue}>{record.tags.map((t) => `#${t}`).join("  ")}</Text>
               </View>
             )}
+            {(() => {
+              const em = getEmotion(record.emotion);
+              return (
+                <View style={s.metaRow}>
+                  <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: em.color }} />
+                  <Text style={s.metaLabel}>Emotion</Text>
+                  <Text style={[s.metaValue, { color: em.color }]}>{em.label}</Text>
+                </View>
+              );
+            })()}
             {record.location && (
               <View style={s.metaRow}>
                 <Feather name="map-pin" size={14} color={colors.primary} />
@@ -642,41 +657,95 @@ export default function RecordDetailScreen() {
                   placeholderTextColor={colors.mutedForeground}
                 />
 
-                {/* Tag rank reorder — only shown when the record has tags */}
-                {editedTags.length > 0 && (
-                  <View style={s.tagReorderBox}>
-                    <View style={s.tagReorderHeader}>
-                      <Feather name="folder" size={13} color={colors.mutedForeground} />
-                      <Text style={s.tagReorderLabel}>Folder tag</Text>
-                      <Text style={s.tagReorderHint}>Tap any tag to make it primary</Text>
-                    </View>
-                    <View style={s.tagReorderRow}>
-                      {editedTags.map((tag, index) => {
-                        const isPrimary = index === 0;
-                        return (
+                {/* Tag management — reorder + add/remove */}
+                <View style={s.tagReorderBox}>
+                  {editedTags.length > 0 && (
+                    <>
+                      <View style={s.tagReorderHeader}>
+                        <Feather name="folder" size={13} color={colors.mutedForeground} />
+                        <Text style={s.tagReorderLabel}>Folder tag</Text>
+                        <Text style={s.tagReorderHint}>Tap to promote · × to remove</Text>
+                      </View>
+                      <View style={s.tagReorderRow}>
+                        {editedTags.map((tag, index) => {
+                          const isPrimary = index === 0;
+                          return (
+                            <View key={tag} style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                              <Pressable
+                                style={[s.tagReorderChip, isPrimary && s.tagReorderChipPrimary]}
+                                onPress={() => handlePromoteTag(tag)}
+                                disabled={isPrimary}
+                              >
+                                <View style={[s.tagRankBadge, isPrimary && s.tagRankBadgePrimary]}>
+                                  <Text style={[s.tagRankBadgeText, isPrimary && s.tagRankBadgeTextPrimary]}>
+                                    {index + 1}
+                                  </Text>
+                                </View>
+                                <Text style={[s.tagReorderChipText, isPrimary && s.tagReorderChipTextPrimary]}>
+                                  #{tag}
+                                </Text>
+                                {isPrimary && (
+                                  <Feather name="folder" size={12} color={colors.primary} />
+                                )}
+                              </Pressable>
+                              <Pressable
+                                hitSlop={8}
+                                onPress={() => {
+                                  if (Platform.OS !== "web") Haptics.selectionAsync();
+                                  setEditedTags((prev) => prev.filter((t) => t !== tag));
+                                }}
+                                style={{ padding: 2 }}
+                              >
+                                <Feather name="x" size={14} color={colors.mutedForeground} />
+                              </Pressable>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    </>
+                  )}
+                  {/* Add tags from known tags */}
+                  {knownTags.filter((t) => !editedTags.includes(t)).length > 0 && (
+                    <View style={{ gap: 6, marginTop: editedTags.length > 0 ? 10 : 0 }}>
+                      <Text style={{ fontSize: 11, fontFamily: "Inter_500Medium", color: colors.mutedForeground }}>
+                        Add tag:
+                      </Text>
+                      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+                        {knownTags.filter((t) => !editedTags.includes(t)).map((tag) => (
                           <Pressable
                             key={tag}
-                            style={[s.tagReorderChip, isPrimary && s.tagReorderChipPrimary]}
-                            onPress={() => handlePromoteTag(tag)}
-                            disabled={isPrimary}
+                            onPress={() => {
+                              if (Platform.OS !== "web") Haptics.selectionAsync();
+                              setEditedTags((prev) => [...prev, tag]);
+                            }}
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              gap: 4,
+                              backgroundColor: colors.surface,
+                              borderRadius: 12,
+                              borderWidth: 1,
+                              borderColor: colors.border,
+                              paddingHorizontal: 10,
+                              paddingVertical: 5,
+                            }}
                           >
-                            <View style={[s.tagRankBadge, isPrimary && s.tagRankBadgePrimary]}>
-                              <Text style={[s.tagRankBadgeText, isPrimary && s.tagRankBadgeTextPrimary]}>
-                                {index + 1}
-                              </Text>
-                            </View>
-                            <Text style={[s.tagReorderChipText, isPrimary && s.tagReorderChipTextPrimary]}>
+                            <Feather name="plus" size={12} color={colors.mutedForeground} />
+                            <Text style={{ fontSize: 13, fontFamily: "Inter_400Regular", color: colors.foreground }}>
                               #{tag}
                             </Text>
-                            {isPrimary && (
-                              <Feather name="folder" size={12} color={colors.primary} />
-                            )}
                           </Pressable>
-                        );
-                      })}
+                        ))}
+                      </View>
                     </View>
-                  </View>
-                )}
+                  )}
+                </View>
+
+                {/* Emotion picker */}
+                <View style={{ gap: 6 }}>
+                  <Text style={s.tagReorderLabel}>Emotion</Text>
+                  <EmotionPicker value={editedEmotion} onChange={setEditedEmotion} />
+                </View>
 
                 {/* Memory year stepper */}
                 <View style={s.yearStepperRow}>

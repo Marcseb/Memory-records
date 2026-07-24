@@ -5,6 +5,7 @@ export interface MemoryRecord {
   id: string;
   imageUri?: string;
   tags?: string[];
+  emotion?: string;
   note: string;
   date: string;
   contextYear?: number;

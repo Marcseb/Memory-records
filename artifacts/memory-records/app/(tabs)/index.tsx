@@ -1,26 +1,39 @@
 import { Feather } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Alert,
   FlatList,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { RecordCard } from "@/components/RecordCard";
+import { EMOTIONS, getEmotion } from "@/constants/emotions";
 import { MemoryRecord, useRecords } from "@/context/RecordsContext";
 import { useColors } from "@/hooks/useColors";
 
 const UNTAGGED_KEY = "__untagged__";
+const SORT_KEY = "mr_sort_mode";
+
+type SortMode = "tag" | "emotion" | "input-date" | "note-date";
+
+const SORT_LABELS: { mode: SortMode; label: string; icon: string }[] = [
+  { mode: "tag",        label: "Folder",  icon: "folder" },
+  { mode: "emotion",    label: "Emotion", icon: "heart" },
+  { mode: "input-date", label: "Added",   icon: "clock" },
+  { mode: "note-date",  label: "Date",    icon: "calendar" },
+];
 
 type ListItem =
-  | { type: "header"; tag: string; count: number }
+  | { type: "header"; label: string; count: number; emotionColor?: string }
   | { type: "record"; record: MemoryRecord };
 
 export default function HomeScreen() {
@@ -29,6 +42,15 @@ export default function HomeScreen() {
   const { records, deleteRecord, updateRecord, isLoading } = useRecords();
   const [refreshing] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [sortMode, setSortMode] = useState<SortMode>("tag");
+
+  useEffect(() => {
+    AsyncStorage.getItem(SORT_KEY).then((v) => {
+      if (v === "tag" || v === "emotion" || v === "input-date" || v === "note-date") {
+        setSortMode(v);
+      }
+    });
+  }, []);
 
   const handleDelete = (record: MemoryRecord) => {
     Alert.alert("Delete Record", "Are you sure you want to delete this memory?", [
@@ -69,46 +91,91 @@ export default function HomeScreen() {
     router.push("/help");
   };
 
-  const toggleGroup = (tag: string) => {
+  const handleSortMode = async (mode: SortMode) => {
+    if (Platform.OS !== "web") Haptics.selectionAsync();
+    setSortMode(mode);
+    await AsyncStorage.setItem(SORT_KEY, mode);
+    setCollapsedGroups(new Set());
+  };
+
+  const toggleGroup = (label: string) => {
     if (Platform.OS !== "web") Haptics.selectionAsync();
     setCollapsedGroups((prev) => {
       const next = new Set(prev);
-      if (next.has(tag)) next.delete(tag);
-      else next.add(tag);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
       return next;
     });
   };
 
-  // Group records by primary tag, tagged groups sorted alphabetically,
-  // untagged group always last.
-  const groups = useMemo<[string, MemoryRecord[]][]>(() => {
-    const map = new Map<string, MemoryRecord[]>();
-    for (const record of records) {
-      const key = record.tags?.[0] ?? UNTAGGED_KEY;
-      if (!map.has(key)) map.set(key, []);
-      map.get(key)!.push(record);
+  const groups = useMemo<[string, MemoryRecord[], string?][]>(() => {
+    if (sortMode === "tag") {
+      const map = new Map<string, MemoryRecord[]>();
+      for (const record of records) {
+        const key = record.tags?.[0] ?? UNTAGGED_KEY;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key)!.push(record);
+      }
+      return [...map.entries()]
+        .sort(([a], [b]) => {
+          if (a === UNTAGGED_KEY) return 1;
+          if (b === UNTAGGED_KEY) return -1;
+          return a.localeCompare(b);
+        })
+        .map(([k, recs]) => [k, recs, undefined]);
     }
-    return [...map.entries()].sort(([a], [b]) => {
-      if (a === UNTAGGED_KEY) return 1;
-      if (b === UNTAGGED_KEY) return -1;
-      return a.localeCompare(b);
-    });
-  }, [records]);
 
-  // Flatten groups into a single array for FlatList, hiding records in
-  // collapsed groups.
+    if (sortMode === "emotion") {
+      const map = new Map<string, MemoryRecord[]>();
+      for (const record of records) {
+        const key = record.emotion ?? "neutral";
+        if (!map.has(key)) map.set(key, []);
+        map.get(key)!.push(record);
+      }
+      return [...map.entries()]
+        .sort(([a], [b]) => {
+          const eA = getEmotion(a);
+          const eB = getEmotion(b);
+          if (a === "neutral") return 1;
+          if (b === "neutral") return -1;
+          return eA.label.localeCompare(eB.label);
+        })
+        .map(([k, recs]) => [k, recs, getEmotion(k).color]);
+    }
+
+    return [];
+  }, [records, sortMode]);
+
   const listData = useMemo<ListItem[]>(() => {
+    if (sortMode === "input-date") {
+      return [...records]
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .map((record) => ({ type: "record" as const, record }));
+    }
+
+    if (sortMode === "note-date") {
+      return [...records]
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .map((record) => ({ type: "record" as const, record }));
+    }
+
     const items: ListItem[] = [];
-    for (const [tag, recs] of groups) {
-      items.push({ type: "header", tag, count: recs.length });
-      if (!collapsedGroups.has(tag)) {
+    for (const [key, recs, color] of groups) {
+      let label: string;
+      if (sortMode === "tag") {
+        label = key === UNTAGGED_KEY ? "Untagged" : `#${key}`;
+      } else {
+        label = getEmotion(key).label;
+      }
+      items.push({ type: "header", label, count: recs.length, emotionColor: color });
+      if (!collapsedGroups.has(label)) {
         for (const record of recs) {
           items.push({ type: "record", record });
         }
       }
     }
     return items;
-  }, [groups, collapsedGroups]);
+  }, [groups, collapsedGroups, sortMode, records]);
 
   const s = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
@@ -162,6 +229,38 @@ export default function HomeScreen() {
       shadowRadius: 8,
       elevation: 4,
     },
+    sortBar: {
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+      backgroundColor: colors.background,
+    },
+    sortPill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      marginRight: 8,
+    },
+    sortPillActive: {
+      backgroundColor: colors.primary + "18",
+      borderColor: colors.primary,
+    },
+    sortPillText: {
+      fontSize: 13,
+      fontFamily: "Inter_500Medium",
+      color: colors.mutedForeground,
+    },
+    sortPillTextActive: {
+      color: colors.primary,
+      fontFamily: "Inter_600SemiBold",
+    },
     list: { flex: 1 },
     listContent: {
       paddingTop: 12,
@@ -201,7 +300,6 @@ export default function HomeScreen() {
       paddingHorizontal: 20,
       paddingBottom: 8,
     },
-    // Group header
     groupHeader: {
       flexDirection: "row",
       alignItems: "center",
@@ -235,6 +333,8 @@ export default function HomeScreen() {
     },
   });
 
+  const isGrouped = sortMode === "tag" || sortMode === "emotion";
+
   return (
     <View style={s.container}>
       <View style={s.header}>
@@ -252,10 +352,33 @@ export default function HomeScreen() {
         </View>
       </View>
 
+      {/* Sort bar */}
+      <View style={s.sortBar}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          {SORT_LABELS.map(({ mode, label, icon }) => {
+            const active = sortMode === mode;
+            return (
+              <Pressable
+                key={mode}
+                style={[s.sortPill, active && s.sortPillActive]}
+                onPress={() => handleSortMode(mode)}
+              >
+                <Feather
+                  name={icon as any}
+                  size={13}
+                  color={active ? colors.primary : colors.mutedForeground}
+                />
+                <Text style={[s.sortPillText, active && s.sortPillTextActive]}>{label}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </View>
+
       <FlatList
         data={listData}
         keyExtractor={(item) =>
-          item.type === "header" ? `header-${item.tag}` : item.record.id
+          item.type === "header" ? `header-${item.label}` : item.record.id
         }
         style={s.list}
         contentContainerStyle={[
@@ -268,7 +391,9 @@ export default function HomeScreen() {
           records.length > 0 ? (
             <Text style={s.count}>
               {records.length} {records.length === 1 ? "record" : "records"}
-              {" · "}{groups.length} {groups.length === 1 ? "folder" : "folders"}
+              {isGrouped && groups.length > 0
+                ? `  ·  ${groups.length} ${groups.length === 1 ? "group" : "groups"}`
+                : null}
             </Text>
           ) : null
         }
@@ -287,20 +412,27 @@ export default function HomeScreen() {
         }
         renderItem={({ item }) => {
           if (item.type === "header") {
-            const isCollapsed = collapsedGroups.has(item.tag);
-            const isUntagged = item.tag === UNTAGGED_KEY;
+            const isCollapsed = collapsedGroups.has(item.label);
+            const isEmotion = sortMode === "emotion";
+            const dotColor = item.emotionColor;
             return (
-              <Pressable style={s.groupHeader} onPress={() => toggleGroup(item.tag)}>
-                <Feather
-                  name={isCollapsed ? "folder" : "folder-open"}
-                  size={16}
-                  color={isUntagged ? colors.mutedForeground : colors.primary}
-                />
-                <Text style={s.groupHeaderLabel}>
-                  {isUntagged ? "Untagged" : `#${item.tag}`}
+              <Pressable style={s.groupHeader} onPress={() => toggleGroup(item.label)}>
+                {isEmotion && dotColor ? (
+                  <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: dotColor }} />
+                ) : (
+                  <Feather
+                    name={isCollapsed ? "folder" : "folder-open" as any}
+                    size={16}
+                    color={item.label === "Untagged" ? colors.mutedForeground : colors.primary}
+                  />
+                )}
+                <Text style={[s.groupHeaderLabel, isEmotion && dotColor ? { color: dotColor } : null]}>
+                  {item.label}
                 </Text>
-                <View style={s.groupCountBadge}>
-                  <Text style={s.groupCountText}>{item.count}</Text>
+                <View style={[s.groupCountBadge, isEmotion && dotColor ? { backgroundColor: dotColor + "20" } : null]}>
+                  <Text style={[s.groupCountText, isEmotion && dotColor ? { color: dotColor } : null]}>
+                    {item.count}
+                  </Text>
                 </View>
                 <Feather
                   name={isCollapsed ? "chevron-right" : "chevron-down"}

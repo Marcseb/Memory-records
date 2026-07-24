@@ -20,6 +20,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
+import { EmotionPicker } from "@/components/EmotionPicker";
 import { MemoryRecord, useRecords } from "@/context/RecordsContext";
 import { useSettings } from "@/context/SettingsContext";
 import { useObsidian } from "@/hooks/useObsidian";
@@ -110,6 +111,9 @@ export default function NewRecordScreen() {
     setYearInputText("");
   };
   const [savedBanner, setSavedBanner] = useState(false);
+
+  // Emotion state
+  const [selectedEmotion, setSelectedEmotion] = useState("neutral");
 
   // Tag state — ordered array; index 0 is the primary tag (drives filename)
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -245,6 +249,7 @@ export default function NewRecordScreen() {
     setNote("");
     setManualDate(todayString());
     setContextYear(undefined);
+    setSelectedEmotion("neutral");
     setSelectedTags([]);
     setShowNewTagInput(false);
     setNewTagDraft("");
@@ -264,6 +269,7 @@ export default function NewRecordScreen() {
       id: generateId(),
       imageUri: photo?.uri,
       tags: selectedTags.length > 0 ? selectedTags : undefined,
+      emotion: selectedEmotion,
       note: note.trim(),
       date: photo?.date ?? manualDate,
       contextYear: contextYear,
@@ -1104,6 +1110,12 @@ export default function NewRecordScreen() {
                 </Text>
               </View>
             )}
+          </View>
+
+          {/* Emotion section */}
+          <View style={s.section}>
+            <Text style={s.sectionLabel}>Emotion (optional)</Text>
+            <EmotionPicker value={selectedEmotion} onChange={setSelectedEmotion} />
           </View>
 
           {/* AI Interviewer section */}
