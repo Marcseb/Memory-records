@@ -24,7 +24,7 @@ import { EmotionPicker } from "@/components/EmotionPicker";
 import { MemoryRecord, useRecords } from "@/context/RecordsContext";
 import { useSettings } from "@/context/SettingsContext";
 import { useObsidian } from "@/hooks/useObsidian";
-import { useInterview } from "@/hooks/useInterview";
+import { useInterview, ContextNote } from "@/hooks/useInterview";
 import { useColors } from "@/hooks/useColors";
 
 interface PhotoData {
@@ -83,7 +83,7 @@ function normalizeTag(raw: string): string {
 export default function NewRecordScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { addRecord, updateRecord, knownTags, addTag } = useRecords();
+  const { records, addRecord, updateRecord, knownTags, addTag } = useRecords();
   const { settings } = useSettings();
   const { saveToObsidian } = useObsidian();
 
@@ -123,6 +123,8 @@ export default function NewRecordScreen() {
 
   // Interview state
   const [interviewEnabled, setInterviewEnabled] = useState(false);
+  const [contextNotes, setContextNotes] = useState<ContextNote[]>([]);
+  const [showContextPicker, setShowContextPicker] = useState(false);
   const { question, isLoading: interviewLoading, error: interviewError, startInterview, nextQuestion, reset: resetInterview } = useInterview();
 
   // Auto-initialize when arriving from an existing record's "New note" button
@@ -211,11 +213,33 @@ export default function NewRecordScreen() {
     if (Platform.OS !== "web") Haptics.selectionAsync();
     if (!interviewEnabled) {
       setInterviewEnabled(true);
-      await startInterview(selectedTags, contextNote ?? undefined);
+      await startInterview(selectedTags, contextNote ?? undefined, contextNotes);
     } else {
       setInterviewEnabled(false);
       resetInterview();
     }
+  };
+
+  const handleOpenContextPicker = () => {
+    if (Platform.OS !== "web") Haptics.selectionAsync();
+    setShowContextPicker(true);
+  };
+
+  const handleToggleContextNote = (rec: MemoryRecord) => {
+    if (Platform.OS !== "web") Haptics.selectionAsync();
+    setContextNotes((prev) => {
+      const exists = prev.some((n) => n.note === rec.note && n.date === rec.date);
+      if (exists) return prev.filter((n) => !(n.note === rec.note && n.date === rec.date));
+      if (prev.length >= 3) return prev; // max 3
+      const cn: ContextNote = {
+        note: rec.note,
+        date: rec.date,
+        tags: rec.tags,
+        contextYear: rec.contextYear,
+        emotion: rec.emotion,
+      };
+      return [...prev, cn];
+    });
   };
 
   const handleNextQuestion = async () => {
@@ -254,6 +278,7 @@ export default function NewRecordScreen() {
     setShowNewTagInput(false);
     setNewTagDraft("");
     setInterviewEnabled(false);
+    setContextNotes([]);
     resetInterview();
   };
 
@@ -754,6 +779,127 @@ export default function NewRecordScreen() {
       fontFamily: "Inter_500Medium",
       color: colors.success,
     },
+    // Context notes picker
+    contextPickerOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.5)",
+      justifyContent: "flex-end",
+    },
+    contextPickerSheet: {
+      backgroundColor: colors.background,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      paddingHorizontal: 20,
+      paddingTop: 20,
+      paddingBottom: Platform.OS === "web" ? 32 : insets.bottom + 24,
+      maxHeight: "75%",
+    },
+    contextPickerHandle: {
+      width: 36,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: colors.border,
+      alignSelf: "center",
+      marginBottom: 16,
+    },
+    contextPickerTitle: {
+      fontSize: 16,
+      fontFamily: "Inter_600SemiBold",
+      color: colors.foreground,
+      marginBottom: 4,
+    },
+    contextPickerSub: {
+      fontSize: 13,
+      fontFamily: "Inter_400Regular",
+      color: colors.mutedForeground,
+      marginBottom: 14,
+      lineHeight: 18,
+    },
+    contextPickerItem: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      gap: 10,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    contextPickerItemSelected: {
+      backgroundColor: colors.primary + "08",
+      borderRadius: colors.radius,
+      paddingHorizontal: 8,
+    },
+    contextPickerCheckbox: {
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      borderWidth: 2,
+      borderColor: colors.border,
+      alignItems: "center",
+      justifyContent: "center",
+      marginTop: 2,
+      flexShrink: 0,
+    },
+    contextPickerCheckboxActive: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    contextPickerItemMeta: {
+      fontSize: 11,
+      fontFamily: "Inter_500Medium",
+      color: colors.mutedForeground,
+      marginBottom: 3,
+    },
+    contextPickerItemText: {
+      fontSize: 13,
+      fontFamily: "Inter_400Regular",
+      color: colors.foreground,
+      lineHeight: 18,
+    },
+    contextPickerDoneBtn: {
+      marginTop: 14,
+      backgroundColor: colors.primary,
+      borderRadius: colors.radius,
+      paddingVertical: 13,
+      alignItems: "center",
+    },
+    contextPickerDoneText: {
+      fontSize: 15,
+      fontFamily: "Inter_600SemiBold",
+      color: colors.primaryForeground,
+    },
+    contextNoteChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    contextNoteChipText: {
+      fontSize: 12,
+      fontFamily: "Inter_400Regular",
+      color: colors.foreground,
+      maxWidth: 160,
+    },
+    addContextBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: 14,
+      borderWidth: 1.5,
+      borderColor: colors.border,
+      borderStyle: "dashed",
+    },
+    addContextBtnText: {
+      fontSize: 12,
+      fontFamily: "Inter_500Medium",
+      color: colors.mutedForeground,
+    },
     // Voice modal
     modalOverlay: {
       flex: 1,
@@ -832,6 +978,66 @@ export default function NewRecordScreen() {
 
   return (
     <View style={s.container}>
+      {/* Context notes picker modal */}
+      <Modal
+        visible={showContextPicker}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowContextPicker(false)}
+      >
+        <Pressable style={s.contextPickerOverlay} onPress={() => setShowContextPicker(false)}>
+          <Pressable style={s.contextPickerSheet} onPress={Keyboard.dismiss}>
+            <View style={s.contextPickerHandle} />
+            <Text style={s.contextPickerTitle}>Add context notes</Text>
+            <Text style={s.contextPickerSub}>
+              Select up to 3 existing memories to give the interviewer broader context.
+              {contextNotes.length === 3 ? " (Maximum reached)" : ` ${3 - contextNotes.length} remaining`}
+            </Text>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+              {records
+                .filter((r) => r.note && r.note.trim().length > 0)
+                .map((rec) => {
+                  const isSelected = contextNotes.some(
+                    (n) => n.note === rec.note && n.date === rec.date
+                  );
+                  const isDisabled = !isSelected && contextNotes.length >= 3;
+                  const metaParts: string[] = [rec.date];
+                  if (rec.contextYear !== undefined) metaParts.push(String(rec.contextYear));
+                  if (rec.tags?.length) metaParts.push(rec.tags.map((t) => `#${t}`).join(" "));
+                  return (
+                    <Pressable
+                      key={rec.id}
+                      style={[s.contextPickerItem, isSelected && s.contextPickerItemSelected]}
+                      onPress={() => !isDisabled && handleToggleContextNote(rec)}
+                      disabled={isDisabled}
+                    >
+                      <View style={[s.contextPickerCheckbox, isSelected && s.contextPickerCheckboxActive]}>
+                        {isSelected && <Feather name="check" size={12} color={colors.primaryForeground} />}
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[s.contextPickerItemMeta, isDisabled && { opacity: 0.4 }]}>
+                          {metaParts.join(" · ")}
+                        </Text>
+                        <Text
+                          style={[s.contextPickerItemText, isDisabled && { opacity: 0.4 }]}
+                          numberOfLines={2}
+                        >
+                          {rec.note}
+                        </Text>
+                      </View>
+                    </Pressable>
+                  );
+                })}
+            </ScrollView>
+            <Pressable style={s.contextPickerDoneBtn} onPress={() => setShowContextPicker(false)}>
+              <Text style={s.contextPickerDoneText}>
+                Done{contextNotes.length > 0 ? ` · ${contextNotes.length} selected` : ""}
+              </Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {/* Voice dictation modal */}
       <Modal
         visible={voiceModalVisible}
@@ -1137,6 +1343,68 @@ export default function NewRecordScreen() {
                 </Text>
               </Pressable>
             </View>
+
+            {/* Context notes — shown before and after starting interview */}
+            {!interviewEnabled && records.filter((r) => r.note?.trim()).length > 0 && (
+              <View style={{ gap: 8 }}>
+                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                    <Feather name="layers" size={12} color={colors.mutedForeground} />
+                    <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: colors.mutedForeground }}>
+                      Context notes for interview{contextNotes.length > 0 ? ` (${contextNotes.length}/3)` : " (optional)"}
+                    </Text>
+                  </View>
+                  <Pressable style={s.addContextBtn} onPress={handleOpenContextPicker}>
+                    <Feather name="plus" size={12} color={colors.mutedForeground} />
+                    <Text style={s.addContextBtnText}>
+                      {contextNotes.length === 0 ? "Add context" : contextNotes.length < 3 ? "Add more" : "Edit"}
+                    </Text>
+                  </Pressable>
+                </View>
+                {contextNotes.length > 0 && (
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+                    {contextNotes.map((cn, i) => (
+                      <View key={i} style={s.contextNoteChip}>
+                        <Feather name="file-text" size={11} color={colors.mutedForeground} />
+                        <Text style={s.contextNoteChipText} numberOfLines={1}>
+                          {cn.date}{cn.tags?.length ? ` · #${cn.tags[0]}` : ""}
+                        </Text>
+                        <Pressable
+                          hitSlop={8}
+                          onPress={() => {
+                            if (Platform.OS !== "web") Haptics.selectionAsync();
+                            setContextNotes((prev) => prev.filter((_, j) => j !== i));
+                          }}
+                        >
+                          <Feather name="x" size={12} color={colors.mutedForeground} />
+                        </Pressable>
+                      </View>
+                    ))}
+                  </View>
+                )}
+                {contextNotes.length === 0 && (
+                  <Text style={{ fontSize: 11, fontFamily: "Inter_400Regular", color: colors.mutedForeground, fontStyle: "italic" }}>
+                    Pick up to 3 past memories to give the AI broader background for its questions.
+                  </Text>
+                )}
+              </View>
+            )}
+
+            {interviewEnabled && contextNotes.length > 0 && (
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+                <Feather name="layers" size={12} color={colors.primary} />
+                <Text style={{ fontSize: 12, fontFamily: "Inter_400Regular", color: colors.mutedForeground }}>
+                  Context:
+                </Text>
+                {contextNotes.map((cn, i) => (
+                  <View key={i} style={{ backgroundColor: colors.primary + "14", borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 }}>
+                    <Text style={{ fontSize: 12, fontFamily: "Inter_500Medium", color: colors.primary }}>
+                      {cn.date}{cn.tags?.length ? ` · #${cn.tags[0]}` : ""}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
 
             {interviewEnabled && selectedTags.length > 0 && (
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, alignItems: "center" }}>

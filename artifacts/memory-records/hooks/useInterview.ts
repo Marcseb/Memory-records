@@ -19,6 +19,14 @@ Rules:
 - Never repeat a question already asked.
 - Do not add preamble like "Great!" or "Thank you for sharing" — go straight to the question.`;
 
+export interface ContextNote {
+  note: string;
+  date: string;
+  tags?: string[];
+  contextYear?: number;
+  emotion?: string;
+}
+
 export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
@@ -34,7 +42,7 @@ interface UseInterviewResult {
   isLoading: boolean;
   error: string | null;
   history: ChatMessage[];
-  startInterview: (tags?: string[], seedContext?: string) => Promise<void>;
+  startInterview: (tags?: string[], seedContext?: string, contextNotes?: ContextNote[]) => Promise<void>;
   nextQuestion: (userNote: string, tags?: string[]) => Promise<void>;
   reset: () => void;
 }
@@ -77,7 +85,29 @@ async function callOpenAI(key: string, messages: FullMessage[]): Promise<string>
   return data.choices[0].message.content.trim();
 }
 
-async function fetchQuestion(messages: ChatMessage[], tags: string[]): Promise<string> {
+function buildContextNotesBlock(contextNotes: ContextNote[]): string {
+  if (!contextNotes.length) return "";
+  const lines: string[] = [
+    "\n\nRELATED MEMORIES PROVIDED BY THE USER AS BACKGROUND CONTEXT:",
+    "Use these to understand themes, relationships, and recurring people or places in the user's life.",
+    "Reference them to ask more connected, meaningful questions — but do not repeat what is already described.",
+  ];
+  contextNotes.forEach((n, i) => {
+    const meta: string[] = [`Date: ${n.date}`];
+    if (n.contextYear !== undefined) meta.push(`Memory year: ${n.contextYear}`);
+    if (n.tags?.length) meta.push(`Tags: ${n.tags.map((t) => `#${t}`).join(", ")}`);
+    if (n.emotion) meta.push(`Emotion: ${n.emotion}`);
+    const truncated = n.note.length > 400 ? n.note.slice(0, 397) + "…" : n.note;
+    lines.push(`\n[Context ${i + 1}] ${meta.join(" · ")}\n"${truncated}"`);
+  });
+  return lines.join("\n");
+}
+
+async function fetchQuestion(
+  messages: ChatMessage[],
+  tags: string[],
+  contextNotes: ContextNote[] = []
+): Promise<string> {
   const [mistralKey, openaiKey] = await Promise.all([
     SecureStore.getItemAsync(MISTRAL_KEY_STORE),
     SecureStore.getItemAsync(OPENAI_KEY_STORE),
@@ -97,8 +127,10 @@ async function fetchQuestion(messages: ChatMessage[], tags: string[]): Promise<s
       ? `\n\nFOCUS TOPICS: The user has selected these tags for this memory session: ${tags.map((t) => `#${t}`).join(", ")}.\nYour questions MUST stay focused on memories related to these specific topics. Do not ask about unrelated life areas. Every question should be directly connected to at least one of these themes.`
       : "";
 
+  const contextBlock = buildContextNotesBlock(contextNotes);
+
   const fullMessages: FullMessage[] = [
-    { role: "system", content: SYSTEM_PROMPT + tagContext },
+    { role: "system", content: SYSTEM_PROMPT + tagContext + contextBlock },
     ...messages,
   ];
 
@@ -130,11 +162,18 @@ export function useInterview(): UseInterviewResult {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [history, setHistory] = useState<ChatMessage[]>([]);
+  // Store context notes for follow-up questions in the same session
+  const [sessionContextNotes, setSessionContextNotes] = useState<ContextNote[]>([]);
 
-  const startInterview = useCallback(async (tags: string[] = [], seedContext?: string) => {
+  const startInterview = useCallback(async (
+    tags: string[] = [],
+    seedContext?: string,
+    contextNotes: ContextNote[] = []
+  ) => {
     setIsLoading(true);
     setError(null);
     setQuestion(null);
+    setSessionContextNotes(contextNotes);
 
     const truncated =
       seedContext && seedContext.length > 600
@@ -149,7 +188,7 @@ export function useInterview(): UseInterviewResult {
     };
 
     try {
-      const q = await fetchQuestion([seed], tags);
+      const q = await fetchQuestion([seed], tags, contextNotes);
       const initialHistory: ChatMessage[] = [seed, { role: "assistant", content: q }];
       setHistory(initialHistory);
       setQuestion(q);
@@ -175,7 +214,7 @@ export function useInterview(): UseInterviewResult {
       const updatedHistory = [...history, userMsg];
 
       try {
-        const q = await fetchQuestion(updatedHistory, tags);
+        const q = await fetchQuestion(updatedHistory, tags, sessionContextNotes);
         const newHistory: ChatMessage[] = [
           ...updatedHistory,
           { role: "assistant", content: q },
@@ -189,13 +228,14 @@ export function useInterview(): UseInterviewResult {
         setIsLoading(false);
       }
     },
-    [history]
+    [history, sessionContextNotes]
   );
 
   const reset = useCallback(() => {
     setQuestion(null);
     setError(null);
     setHistory([]);
+    setSessionContextNotes([]);
   }, []);
 
   return { question, isLoading, error, history, startInterview, nextQuestion, reset };
