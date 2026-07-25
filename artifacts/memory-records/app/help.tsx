@@ -238,6 +238,18 @@ export default function HelpScreen() {
             Works with <Text style={s.strong}>Mistral</Text> (recommended, free tier available at console.mistral.ai) or <Text style={s.strong}>OpenAI</Text> as a fallback.
           </Bullet>
           <Bullet>
+            On the New Memory screen, scroll to <Text style={s.strong}>AI Interviewer</Text> and tap <Text style={s.strong}>Start interview</Text>. The AI asks one focused question at a time — type or dictate your answer in the Note field, tap <Text style={s.strong}>Next question</Text>, and each answer is saved as a separate note.
+          </Bullet>
+          <Bullet>
+            <Text style={s.strong}>Context notes (up to 3)</Text> — before starting, tap <Text style={s.strong}>Add context</Text> to select up to 3 existing memories as background. The AI reads them to ask more connected questions, referencing recurring people, places, or themes across your records.
+          </Bullet>
+          <Bullet>
+            <Text style={s.strong}>Continuing from an existing record</Text> — on any record's detail screen, tap <Text style={s.strong}>New note</Text>. The new memory screen opens pre-seeded with that record's context. Add context notes if you like, then tap <Text style={s.strong}>Start interview</Text> to begin a session anchored to that memory.
+          </Bullet>
+          <Bullet>
+            Select tags before starting to keep every question focused on a specific theme (family, travel, work, etc.).
+          </Bullet>
+          <Bullet>
             Your API key is stored <Text style={s.strong}>encrypted on this device only</Text> — it is never sent to any server other than Mistral or OpenAI directly when you start an interview.
           </Bullet>
           <View style={{ height: 10 }} />

@@ -93,6 +93,13 @@ Works with **Mistral** (recommended, free tier at [console.mistral.ai](https://c
 1. Get a free API key at [console.mistral.ai](https://console.mistral.ai) (or from [platform.openai.com](https://platform.openai.com)).
 2. In the app → Settings → AI Interviewer → paste your key.
 
+**Using the interviewer:**
+- On the New Memory screen, scroll to **AI Interviewer** and tap **Start interview**.
+- The interviewer asks one focused question at a time. Type or dictate your answer in the Note field, then tap **Next question** to continue. Each answer is saved as a separate note.
+- **Context notes (up to 3)** — before starting, tap **Add context** to pick up to 3 existing memories as background. The AI reads them to ask more connected, meaningful questions — referencing recurring people, places, or themes across your records.
+- **Continuing from an existing record** — on any record's detail screen, tap **New note**. The app opens the new memory screen pre-seeded with that record's note and tags. You can add context notes, then tap **Start interview** to begin a session anchored to that memory.
+- Select tags before starting to keep every question focused on a specific theme (family, travel, work, etc.).
+
 > Your API key is stored in the device's secure enclave — the same mechanism used by banking apps. It is never sent to any server other than Mistral or OpenAI directly when you start an interview.
 
 ---
