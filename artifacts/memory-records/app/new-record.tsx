@@ -144,8 +144,8 @@ export default function NewRecordScreen() {
         setMode("note");
         if (ctxTags.length > 0) setSelectedTags(ctxTags);
         if (ctxYear !== undefined) setContextYear(ctxYear);
-        setInterviewEnabled(true);
-        await startInterview(ctxTags, ctxNote);
+        // Do NOT auto-start the interview — leave it off so the user can
+        // pick context notes first, then tap "Start interview" manually.
       } catch {
         // if anything fails, just open a blank note screen
       }
