@@ -13,6 +13,13 @@ const COUNTRY_MAP: Record<VoiceLanguage, string> = {
   "en-US": "United States",
 };
 
+/** Maps voice-language codes to the full language name used in the output instruction. */
+const LANGUAGE_MAP: Record<VoiceLanguage, string> = {
+  "fr-FR": "French",
+  "it-IT": "Italian",
+  "en-US": "English",
+};
+
 interface RawEvent {
   title: string;
   summary: string;
@@ -114,6 +121,7 @@ function buildPrompt(
   count: number,
   scope: "international" | "national",
   country: string,
+  language: string,
 ): string {
   const focus =
     scope === "international"
@@ -126,6 +134,7 @@ function buildPrompt(
     `For each event provide: "title" (concise name, max 8 words) and "summary" ` +
     `(exactly 10 sentences covering: historical background, key actors and decisions, ` +
     `what happened, immediate consequences, and long-term historical significance). ` +
+    `Write the title and summary entirely in ${language}. ` +
     `Return ONLY a JSON array: [{"title":"...","summary":"..."}]`
   );
 }
@@ -151,16 +160,17 @@ export function useHistoricalEvents() {
 
       try {
         const country = COUNTRY_MAP[language] ?? "France";
+        const outputLanguage = LANGUAGE_MAP[language] ?? "English";
         const now = Date.now();
         const results: MemoryRecord[] = [];
 
         // Fire both scopes in parallel; treat each independently
         const [intlResult, natResult] = await Promise.allSettled([
           maxInternational > 0
-            ? fetchWithFallback(buildPrompt(year, maxInternational, "international", country))
+            ? fetchWithFallback(buildPrompt(year, maxInternational, "international", country, outputLanguage))
             : Promise.resolve("[]"),
           maxNational > 0
-            ? fetchWithFallback(buildPrompt(year, maxNational, "national", country))
+            ? fetchWithFallback(buildPrompt(year, maxNational, "national", country, outputLanguage))
             : Promise.resolve("[]"),
         ]);
 
