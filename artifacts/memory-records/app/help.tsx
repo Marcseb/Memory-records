@@ -228,6 +228,9 @@ export default function HelpScreen() {
           <Bullet>
             <Text style={s.strong}>Date</Text> — flat list sorted by Memory Year, most recent first. Records without a year appear at the bottom.
           </Bullet>
+          <Bullet>
+            <Text style={s.strong}>Year rank reordering (Date mode)</Text> — in Date sort, each card shows its position within its year group as <Text style={s.strong}>N/M</Text> (e.g. 2/5). A column of controls appears on the right: ↑ and ↓ arrows to move the note one step within its year, and a delete button. The first move automatically assigns ranks to all notes in that year based on their current order. Ranks are saved and survive restarts.
+          </Bullet>
         </Section>
 
         <Section icon="cpu" title="AI Interviewer">
@@ -255,6 +258,39 @@ export default function HelpScreen() {
           <View style={{ height: 10 }} />
           <InfoBox>
             To use the AI Interviewer, go to <Text style={{ fontFamily: "Inter_600SemiBold" }}>Settings → AI Interviewer</Text> and enter your own Mistral or OpenAI API key.
+          </InfoBox>
+        </Section>
+
+        <Section icon="globe" title="Historical Events">
+          <Bullet>
+            On any record that has a <Text style={s.strong}>Memory Year</Text> set, the detail screen shows a <Text style={s.strong}>Generate [year] events</Text> button. Tap it to have the AI produce summaries of the most significant events from that year — both worldwide and in your country — written in your chosen language.
+          </Bullet>
+          <Bullet>
+            <Text style={s.strong}>🌐 International events</Text> — worldwide or global scope, not specific to any one country.
+          </Bullet>
+          <Bullet>
+            <Text style={s.strong}>🏛️ National events</Text> — tied to the country of your voice-to-text language: French → France, Italian → Italy, English → United States.
+          </Bullet>
+          <Bullet>
+            Each event is saved as a standard memory record with a ~10-sentence summary covering historical background, key actors, what happened, immediate consequences, and long-term significance — all written in your chosen app language.
+          </Bullet>
+          <Bullet>
+            Generated notes share the same <Text style={s.strong}>Memory Year</Text> as the source record and carry the tag <Text style={s.strong}>#historical</Text>, so they appear grouped beside your personal memory in Date sort mode.
+          </Bullet>
+          <Bullet>
+            <Text style={s.strong}>Amber highlight</Text> — historical event cards have a warm amber background and golden border that makes them instantly distinguishable from personal notes at a glance.
+          </Bullet>
+          <Bullet>
+            <Text style={s.strong}>Settings → Historical Events</Text> — two steppers (0 – 5) let you set how many international and national events are generated per trigger. Set either to 0 to disable that type entirely.
+          </Bullet>
+          <Bullet>
+            Historical notes have the same capabilities as personal notes: editable, saveable to Obsidian, and included in JSON exports and imports. The event type is preserved in Obsidian Markdown and restored on re-import.
+          </Bullet>
+          <View style={{ height: 10 }} />
+          <InfoBox>
+            Historical Events require a Mistral or OpenAI API key configured in{" "}
+            <Text style={{ fontFamily: "Inter_600SemiBold" }}>Settings → AI Interviewer</Text>.
+            The button only appears on records that have a Memory Year set, and is hidden on historical event records themselves.
           </InfoBox>
         </Section>
 
@@ -427,7 +463,7 @@ export default function HelpScreen() {
 
         <View style={s.divider} />
 
-        <Text style={s.footerNote}>Memory Records v1.1{"\n"}Built with Expo · All data local · No tracking</Text>
+        <Text style={s.footerNote}>Memory Records v1.2{"\n"}Built with Expo · All data local · No tracking</Text>
       </ScrollView>
     </View>
   );

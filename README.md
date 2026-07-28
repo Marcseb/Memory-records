@@ -77,9 +77,18 @@ The home list offers four sort modes, toggled with the pill bar at the top:
 | **Tag** | Grouped by primary tag (folder-style) |
 | **Emotion** | Grouped by emotion, alphabetically |
 | **Added** | Flat list, newest-added first |
-| **Date** | Flat list, most recent Memory Year first |
+| **Date** | Flat list, most recent Memory Year first. Manual reordering within each year is supported. |
 
 Groups (Tag and Emotion modes) can be collapsed individually by tapping their header.
+
+### Year rank reordering (Date mode)
+
+In **Date** sort mode, each card shows its position within its year group as `N/M` (e.g. `2/5`). A reorder column appears on the right side of every card with three controls:
+
+- **↑ / ↓** — move the note one step up or down within its year
+- **🗑** — delete the note
+
+The first time any note in a year is moved, all notes in that year are automatically assigned consecutive ranks based on their current display order. Ranks persist across restarts and are included in Obsidian exports (`**Year rank:** N`), so they survive a vault round-trip.
 
 ---
 
@@ -104,6 +113,35 @@ Works with **Mistral** (recommended, free tier at [console.mistral.ai](https://c
 
 ---
 
+## Historical Events
+
+On any record that has a **Memory Year** set, the detail screen shows a **"Generate [year] events"** button. Tap it to have the AI produce summaries of the most significant events from that year — worldwide and in your country — written in your chosen language.
+
+**What gets generated:**
+
+| Type | Scope |
+|---|---|
+| 🌐 **International** | Worldwide or global events |
+| 🏛️ **National** | Events in the country of your voice-to-text language (French → France · Italian → Italy · English → United States) |
+
+Each event is a ~10-sentence summary covering historical background, key actors, what happened, immediate consequences, and long-term significance.
+
+**Visual distinction:**  
+Historical event cards have a warm **amber background** and golden border that makes them instantly recognisable alongside personal notes. The thumbnail area shows a globe icon (international) or flag (national) instead of a camera.
+
+**In the list:**  
+Generated notes share the same `contextYear` as the source record, so they appear grouped next to it in Date sort mode and carry the `#historical` tag for organisation.
+
+**Settings → Historical Events:**  
+Two steppers (range 0 – 5) control how many events of each type are generated per trigger. Setting a type to 0 disables it entirely. Changes take effect immediately.
+
+**Obsidian round-trip:**  
+Each note exports with `**Event type:** International` (or `National`) in its Markdown. Re-importing the `.md` file restores the amber highlight and event scope automatically.
+
+> Requires a Mistral or OpenAI API key configured in Settings → AI Interviewer.
+
+---
+
 ## Obsidian integration
 
 Memory Records can save notes directly into your **Obsidian vault** as Markdown files — formatted, dated, and tagged — using the [Actions URI](https://obsidian-actions-uri.net) community plugin.
@@ -115,7 +153,7 @@ Memory Records can save notes directly into your **Obsidian vault** as Markdown 
 
 > Both Obsidian and Memory Records must be installed on the same device. The app opens Obsidian via a deep link — no Wi-Fi or server needed.
 
-Each saved note includes the date, memory year, tags, emotion, photo path, GPS coordinates, location name, and your full text, formatted in Markdown and fully searchable inside Obsidian.
+Each saved note includes the date, memory year, year rank, tags, emotion, event type (for historical notes), photo path, GPS coordinates, location name, and your full text, formatted in Markdown and fully searchable inside Obsidian.
 
 ---
 
@@ -165,7 +203,7 @@ Scan the QR code shown in the terminal with Expo Go.
 - **All data stays on your device.** Records, photos, tags, and settings are stored as JSON files in your phone's local document directory (`FileSystem.documentDirectory`). Nothing is uploaded to any server.
 - **Encrypted key storage.** AI API keys are stored using the device's secure enclave (expo-secure-store), the same mechanism used by banking apps. They are never written to plain storage.
 - **Local authentication.** Your login credentials are stored locally on this device and are never sent to a remote server.
-- **AI calls are direct.** When the AI Interviewer is active, your messages go directly from your device to Mistral or OpenAI using your own key — no intermediary server reads them.
+- **AI calls are direct.** When the AI Interviewer or Historical Events generator is active, your requests go directly from your device to Mistral or OpenAI using your own key — no intermediary server reads them.
 - **No shared database.** Each installation is fully independent. One user cannot see another user's records.
 
 ---
@@ -191,9 +229,9 @@ artifacts/memory-records/   ← Expo app
     record/[id].tsx         ← Memory detail view
     help.tsx                ← Help & features guide
   components/               ← Shared UI components (EmotionPicker, RecordCard, …)
-  constants/                ← Emotion definitions (22 emotions with colours)
+  constants/                ← Emotion definitions, colour palette
   context/                  ← Auth, Records, Settings providers
-  hooks/                    ← useInterview, useObsidian, useColors, …
+  hooks/                    ← useInterview, useHistoricalEvents, useObsidian, useColors, …
   utils/                    ← obsidianParser, storage (FileSystem wrapper)
 artifacts/api-server/       ← Express API server (TypeScript)
 lib/                        ← Shared TypeScript libraries
