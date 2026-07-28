@@ -59,6 +59,9 @@ function formatMarkdown(record: MemoryRecord, authorName?: string): string {
   if (record.contextYear !== undefined) {
     lines.push(`**Memory year:** ${record.contextYear}`);
   }
+  if (record.yearRank !== undefined) {
+    lines.push(`**Year rank:** ${record.yearRank}`);
+  }
   if (record.tags && record.tags.length > 0) {
     lines.push(`**Tags:** ${record.tags.map((t) => `#${t}`).join("  ")}`);
   }

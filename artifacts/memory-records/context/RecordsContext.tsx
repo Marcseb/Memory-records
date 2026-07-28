@@ -9,6 +9,8 @@ export interface MemoryRecord {
   note: string;
   date: string;
   contextYear?: number;
+  /** Ordering rank within the same contextYear group (1-based, ascending = earlier in year) */
+  yearRank?: number;
   location?: string;
   lat?: number;
   lng?: number;
@@ -24,6 +26,7 @@ interface RecordsContextType {
   updateRecord: (id: string, updates: Partial<MemoryRecord>) => Promise<void>;
   deleteRecord: (id: string) => Promise<void>;
   importRecords: (incoming: MemoryRecord[], incomingTags: string[]) => Promise<void>;
+  reorderWithinYear: (id: string, direction: "up" | "down") => Promise<void>;
   isLoading: boolean;
   knownTags: string[];
   addTag: (tag: string) => Promise<void>;
@@ -90,6 +93,48 @@ export function RecordsProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const reorderWithinYear = useCallback(async (id: string, direction: "up" | "down") => {
+    setRecords((prev) => {
+      const target = prev.find((r) => r.id === id);
+      if (!target || target.contextYear === undefined) return prev;
+
+      const year = target.contextYear;
+
+      // Sort all records in this year by current effective order
+      const inYear = prev
+        .filter((r) => r.contextYear === year)
+        .sort((a, b) => {
+          const rA = a.yearRank, rB = b.yearRank;
+          if (rA !== undefined && rB !== undefined) return rA - rB;
+          if (rA !== undefined) return -1;
+          if (rB !== undefined) return 1;
+          return b.createdAt - a.createdAt;
+        });
+
+      // Normalize: give every record in this year a consecutive rank
+      const withRanks = inYear.map((r, i) => ({ ...r, yearRank: i + 1 }));
+
+      const idx = withRanks.findIndex((r) => r.id === id);
+      if (idx === -1) return prev;
+
+      const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+      if (swapIdx < 0 || swapIdx >= withRanks.length) return prev;
+
+      // Swap the two ranks
+      const tmp = withRanks[idx].yearRank!;
+      withRanks[idx] = { ...withRanks[idx], yearRank: withRanks[swapIdx].yearRank! };
+      withRanks[swapIdx] = { ...withRanks[swapIdx], yearRank: tmp };
+
+      // Merge back into the full records list
+      const rankMap = new Map(withRanks.map((r) => [r.id, r.yearRank!]));
+      const next = prev.map((r) =>
+        rankMap.has(r.id) ? { ...r, yearRank: rankMap.get(r.id) } : r
+      );
+      saveRecords(next);
+      return next;
+    });
+  }, []);
+
   const importRecords = useCallback(async (incoming: MemoryRecord[], incomingTags: string[]) => {
     setRecords((prev) => {
       const existingIds = new Set(incoming.map((r) => r.id));
@@ -125,7 +170,7 @@ export function RecordsProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <RecordsContext.Provider value={{ records, addRecord, updateRecord, deleteRecord, importRecords, isLoading, knownTags, addTag, deleteTag }}>
+    <RecordsContext.Provider value={{ records, addRecord, updateRecord, deleteRecord, importRecords, reorderWithinYear, isLoading, knownTags, addTag, deleteTag }}>
       {children}
     </RecordsContext.Provider>
   );

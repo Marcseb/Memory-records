@@ -34,12 +34,19 @@ const SORT_LABELS: { mode: SortMode; label: string; icon: string }[] = [
 
 type ListItem =
   | { type: "header"; label: string; count: number; emotionColor?: string }
-  | { type: "record"; record: MemoryRecord };
+  | {
+      type: "record";
+      record: MemoryRecord;
+      yearRank?: number;
+      yearTotal?: number;
+      onMoveUp?: () => void;
+      onMoveDown?: () => void;
+    };
 
 export default function HomeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { records, deleteRecord, updateRecord, isLoading } = useRecords();
+  const { records, deleteRecord, updateRecord, reorderWithinYear, isLoading } = useRecords();
   const [refreshing] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [sortMode, setSortMode] = useState<SortMode>("tag");
@@ -154,17 +161,47 @@ export default function HomeScreen() {
     }
 
     if (sortMode === "note-date") {
-      return [...records]
-        .sort((a, b) => {
-          // Sort by the Memory Year the user entered (contextYear).
-          // Records without a year go to the bottom; use createdAt as tiebreaker
-          // within the same year so the order is always deterministic.
-          const yA = a.contextYear ?? -Infinity;
-          const yB = b.contextYear ?? -Infinity;
-          if (yB !== yA) return yB - yA;
-          return b.createdAt - a.createdAt;
-        })
-        .map((record) => ({ type: "record" as const, record }));
+      const sorted = [...records].sort((a, b) => {
+        const yA = a.contextYear ?? -Infinity;
+        const yB = b.contextYear ?? -Infinity;
+        if (yB !== yA) return yB - yA;
+        // Within the same year: ranked records first (ascending), then unranked (newest first)
+        const rA = a.yearRank, rB = b.yearRank;
+        if (rA !== undefined && rB !== undefined) return rA - rB;
+        if (rA !== undefined) return -1;
+        if (rB !== undefined) return 1;
+        return b.createdAt - a.createdAt;
+      });
+
+      // Build a map of year → sorted records for positional info
+      const yearGroups = new Map<number, MemoryRecord[]>();
+      for (const r of sorted) {
+        if (r.contextYear !== undefined) {
+          if (!yearGroups.has(r.contextYear)) yearGroups.set(r.contextYear, []);
+          yearGroups.get(r.contextYear)!.push(r);
+        }
+      }
+
+      return sorted.map((record) => {
+        if (record.contextYear === undefined) {
+          return { type: "record" as const, record };
+        }
+        const group = yearGroups.get(record.contextYear)!;
+        const idx = group.indexOf(record);
+        const total = group.length;
+        return {
+          type: "record" as const,
+          record,
+          yearRank: idx + 1,
+          yearTotal: total,
+          onMoveUp: idx > 0
+            ? () => reorderWithinYear(record.id, "up")
+            : undefined,
+          onMoveDown: idx < total - 1
+            ? () => reorderWithinYear(record.id, "down")
+            : undefined,
+        };
+      });
     }
 
     const items: ListItem[] = [];
@@ -457,6 +494,10 @@ export default function HomeScreen() {
               onPress={() => router.push({ pathname: "/record/[id]", params: { id: record.id } })}
               onDelete={() => handleDelete(record)}
               onAddPhoto={record.imageUri ? undefined : () => handleAddPhoto(record)}
+              yearRank={item.yearRank}
+              yearTotal={item.yearTotal}
+              onMoveUp={item.onMoveUp}
+              onMoveDown={item.onMoveDown}
             />
           );
         }}

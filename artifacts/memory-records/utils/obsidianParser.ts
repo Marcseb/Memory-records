@@ -57,6 +57,12 @@ export function parseObsidianNote(
     if (!isNaN(y)) record.contextYear = y;
   }
 
+  const yearRank = extractField(text, "Year rank");
+  if (yearRank) {
+    const yr = parseInt(yearRank, 10);
+    if (!isNaN(yr) && yr > 0) record.yearRank = yr;
+  }
+
   const tagsStr = extractField(text, "Tags");
   if (tagsStr) {
     const tags = tagsStr
