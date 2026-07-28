@@ -233,6 +233,34 @@ export default function HelpScreen() {
           </Bullet>
         </Section>
 
+        <Section icon="lock" title="Unlocking AI Features">
+          <Bullet>
+            The <Text style={s.strong}>AI Interviewer</Text> and <Text style={s.strong}>Historical Events</Text> generator are grouped into a single AI feature pack, unlocked by a one-time <Text style={s.strong}>€5 contribution via PayPal</Text>. All other features — capturing memories, sorting, tags, emotions, year ranks, Obsidian export, JSON backup — remain fully free with no payment required.
+          </Bullet>
+          <Bullet>
+            Open <Text style={s.strong}>Settings → AI Features</Text> and tap <Text style={s.strong}>Unlock</Text>, or tap the lock icon on the <Text style={s.strong}>Start interview</Text> toggle or <Text style={s.strong}>Generate [year] events</Text> button. The unlock sheet appears.
+          </Bullet>
+          <Bullet>
+            The sheet shows your <Text style={s.strong}>device ID</Text> — a unique token tied to this installation. Copy it or note it.
+          </Bullet>
+          <Bullet>
+            Tap <Text style={s.strong}>Contribute €5 via PayPal</Text>. A pre-filled PayPal form opens in your browser. In the PayPal message field, include your device ID so the payment can be matched automatically.
+          </Bullet>
+          <Bullet>
+            After completing the payment, return to the app and tap <Text style={s.strong}>I've paid — check payment status</Text>. The app queries the server and, if your payment is confirmed, unlocks both AI features immediately.
+          </Bullet>
+          <Bullet>
+            <Text style={s.strong}>Activation code alternative</Text> — send your device ID to the developer (contact via GitHub). Once your payment is verified manually, you'll receive a code in the format <Text style={s.strong}>MR-XXXXXXXX</Text>. Tap <Text style={s.strong}>I have an activation code</Text>, enter it, and tap <Text style={s.strong}>Activate</Text>.
+          </Bullet>
+          <Bullet>
+            The unlock is <Text style={s.strong}>permanent for this device</Text> — no subscription, no renewal. If you reinstall the app, tap Check payment status or re-enter your activation code to restore access.
+          </Bullet>
+          <View style={{ height: 10 }} />
+          <InfoBox>
+            Only the device token and payment timestamp are stored server-side — no personal data, no email, no name.
+          </InfoBox>
+        </Section>
+
         <Section icon="cpu" title="AI Interviewer">
           <Bullet>
             An optional AI agent guides you through a series of warm, open-ended questions to help you recall richer details about a memory — dates, emotions, people, sensory impressions.
@@ -463,7 +491,7 @@ export default function HelpScreen() {
 
         <View style={s.divider} />
 
-        <Text style={s.footerNote}>Memory Records v1.2{"\n"}Built with Expo · All data local · No tracking</Text>
+        <Text style={s.footerNote}>Memory Records v1.3{"\n"}Built with Expo · All data local · No tracking</Text>
       </ScrollView>
     </View>
   );

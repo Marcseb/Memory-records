@@ -92,6 +92,25 @@ The first time any note in a year is moved, all notes in that year are automatic
 
 ---
 
+## Unlocking AI Features
+
+The **AI Interviewer** and **Historical Events** generator are grouped into a single AI feature pack, unlocked by a one-time **€5 contribution via PayPal**. All other features (capturing memories, sorting, tags, emotions, year ranks, Obsidian export/import, JSON backup) remain fully free and require no payment.
+
+### How to unlock
+
+1. Open **Settings → AI Features** and tap **Unlock**, or tap the lock badge on the **Start interview** toggle or **Generate [year] events** button.
+2. The **Unlock AI Features** sheet appears. It shows your **device ID** — a unique token tied to this installation.
+3. Tap **Contribute €5 via PayPal**. A pre-filled PayPal form opens in your browser.  
+   — In the PayPal message / "special instructions" field, include your device ID so the payment can be matched automatically.
+4. After payment, tap **I've paid — check payment status**. The app polls the server; if your payment has been processed, both features unlock immediately.
+5. **Activation code (alternative):** If you prefer, send your device ID to the developer. Once your payment is confirmed, you'll receive a one-time code in the format `MR-XXXXXXXX`. Tap **I have an activation code**, enter it, and tap **Activate**.
+
+The unlock is stored on the server and cached on-device for 12 hours. If you reinstall the app, re-enter your activation code or tap **Check payment status** to restore access.
+
+> The €5 contribution is permanent for the device — no subscription, no recurring charges.
+
+---
+
 ## AI Interviewer
 
 An optional AI agent guides you through warm, open-ended questions to help you recall richer details — dates, emotions, people, sensory impressions.
@@ -204,6 +223,7 @@ Scan the QR code shown in the terminal with Expo Go.
 - **Encrypted key storage.** AI API keys are stored using the device's secure enclave (expo-secure-store), the same mechanism used by banking apps. They are never written to plain storage.
 - **Local authentication.** Your login credentials are stored locally on this device and are never sent to a remote server.
 - **AI calls are direct.** When the AI Interviewer or Historical Events generator is active, your requests go directly from your device to Mistral or OpenAI using your own key — no intermediary server reads them.
+- **Unlock server.** The AI feature unlock is verified against a small server-side database (device token + payment record only). No personal data is stored — only the device token you present and the timestamp of verification.
 - **No shared database.** Each installation is fully independent. One user cannot see another user's records.
 
 ---

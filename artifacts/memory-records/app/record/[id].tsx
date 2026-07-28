@@ -20,6 +20,8 @@ import { useSettings } from "@/context/SettingsContext";
 import { useObsidian } from "@/hooks/useObsidian";
 import { useHistoricalEvents } from "@/hooks/useHistoricalEvents";
 import { useColors } from "@/hooks/useColors";
+import { useUnlock } from "@/context/UnlockContext";
+import { UnlockModal } from "@/components/UnlockModal";
 import { EmotionPicker } from "@/components/EmotionPicker";
 import { getEmotion } from "@/constants/emotions";
 
@@ -31,6 +33,8 @@ export default function RecordDetailScreen() {
   const { settings } = useSettings();
   const { saveToObsidian } = useObsidian();
   const { generate: generateEvents, isLoading: generatingEvents } = useHistoricalEvents();
+  const { isAiUnlocked } = useUnlock();
+  const [showUnlockModal, setShowUnlockModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editedNote, setEditedNote] = useState("");
@@ -185,6 +189,10 @@ export default function RecordDetailScreen() {
   };
 
   const handleGenerateEvents = async () => {
+    if (!isAiUnlocked) {
+      setShowUnlockModal(true);
+      return;
+    }
     if (!record.contextYear) return;
     if (Platform.OS !== "web") await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const events = await generateEvents(
@@ -913,14 +921,16 @@ export default function RecordDetailScreen() {
               disabled={generatingEvents}
             >
               <Feather
-                name="globe"
+                name={isAiUnlocked ? "globe" : "lock"}
                 size={18}
                 color={colors.historicalForeground}
               />
               <Text style={s.generateEventsBtnText}>
                 {generatingEvents
                   ? "Generating events…"
-                  : `Generate ${record.contextYear} events`}
+                  : isAiUnlocked
+                  ? `Generate ${record.contextYear} events`
+                  : `Generate ${record.contextYear} events — unlock`}
               </Text>
             </Pressable>
           )}
@@ -943,6 +953,12 @@ export default function RecordDetailScreen() {
           )}
         </View>
       </KeyboardAwareScrollView>
+
+      <UnlockModal
+        visible={showUnlockModal}
+        featureName="Historical Events"
+        onClose={() => setShowUnlockModal(false)}
+      />
     </View>
   );
 }

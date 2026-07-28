@@ -25,6 +25,8 @@ import { router } from "expo-router";
 import { useAuth } from "@/context/AuthContext";
 import { MemoryRecord, useRecords } from "@/context/RecordsContext";
 import { VoiceLanguage, VOICE_LANGUAGES, useSettings } from "@/context/SettingsContext";
+import { useUnlock } from "@/context/UnlockContext";
+import { UnlockModal } from "@/components/UnlockModal";
 import { useColors } from "@/hooks/useColors";
 import { isObsidianMarkdown, parseMultipleObsidianNotes, parseObsidianNote } from "@/utils/obsidianParser";
 
@@ -41,6 +43,9 @@ export default function SettingsScreen() {
   const [importModalVisible, setImportModalVisible] = useState(false);
   const [importText, setImportText] = useState("");
   const [importing, setImporting] = useState(false);
+
+  const { isAiUnlocked, checkStatus, isChecking } = useUnlock();
+  const [showUnlockModal, setShowUnlockModal] = useState(false);
 
   const [mistralKey, setMistralKey] = useState("");
   const [openaiKey, setOpenaiKey] = useState("");
@@ -676,6 +681,12 @@ export default function SettingsScreen() {
         </Pressable>
       </Modal>
 
+      <UnlockModal
+        visible={showUnlockModal}
+        featureName="AI Features"
+        onClose={() => setShowUnlockModal(false)}
+      />
+
       <View style={s.header}>
         <Text style={s.title}>Settings</Text>
       </View>
@@ -807,6 +818,43 @@ export default function SettingsScreen() {
               {saving ? "Saving..." : "Save Settings"}
             </Text>
           </Pressable>
+        </View>
+
+        {/* AI Features Unlock */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>AI Features</Text>
+          <View style={s.card}>
+            <Pressable
+              style={[s.row, { gap: 12 }]}
+              onPress={isAiUnlocked ? undefined : () => setShowUnlockModal(true)}
+            >
+              <Feather
+                name={isAiUnlocked ? "unlock" : "lock"}
+                size={16}
+                color={isAiUnlocked ? colors.success : colors.historicalForeground}
+              />
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={s.rowLabel}>AI Interviewer & Historical Events</Text>
+                <Text style={[s.rowValue, { fontSize: 12, color: isAiUnlocked ? colors.success : colors.mutedForeground }]}>
+                  {isAiUnlocked ? "Unlocked — both AI features active" : "Locked — €5 contribution required"}
+                </Text>
+              </View>
+              {!isAiUnlocked && (
+                <View style={{ backgroundColor: colors.historical, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: colors.historicalBorder }}>
+                  <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: colors.historicalForeground }}>Unlock</Text>
+                </View>
+              )}
+              {isAiUnlocked && (
+                <Pressable
+                  hitSlop={8}
+                  onPress={checkStatus}
+                  disabled={isChecking}
+                >
+                  <Feather name="refresh-cw" size={14} color={isChecking ? colors.mutedForeground : colors.primary} />
+                </Pressable>
+              )}
+            </Pressable>
+          </View>
         </View>
 
         {/* AI Interviewer */}

@@ -18,6 +18,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AuthProvider } from "@/context/AuthContext";
 import { RecordsProvider } from "@/context/RecordsContext";
 import { SettingsProvider } from "@/context/SettingsContext";
+import { UnlockProvider } from "@/context/UnlockContext";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -61,12 +62,14 @@ export default function RootLayout() {
           <GestureHandlerRootView style={{ flex: 1 }}>
             <KeyboardProvider>
               <AuthProvider>
-                <SettingsProvider>
-                  <RecordsProvider>
-                    <RootLayoutNav />
-                    {!splashDone && <AppSplash onDone={handleSplashDone} />}
-                  </RecordsProvider>
-                </SettingsProvider>
+                <UnlockProvider>
+                  <SettingsProvider>
+                    <RecordsProvider>
+                      <RootLayoutNav />
+                      {!splashDone && <AppSplash onDone={handleSplashDone} />}
+                    </RecordsProvider>
+                  </SettingsProvider>
+                </UnlockProvider>
               </AuthProvider>
             </KeyboardProvider>
           </GestureHandlerRootView>

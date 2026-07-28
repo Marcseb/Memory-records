@@ -26,6 +26,8 @@ import { useSettings } from "@/context/SettingsContext";
 import { useObsidian } from "@/hooks/useObsidian";
 import { useInterview, ContextNote } from "@/hooks/useInterview";
 import { useColors } from "@/hooks/useColors";
+import { useUnlock } from "@/context/UnlockContext";
+import { UnlockModal } from "@/components/UnlockModal";
 
 interface PhotoData {
   uri: string;
@@ -121,6 +123,10 @@ export default function NewRecordScreen() {
   const [newTagDraft, setNewTagDraft] = useState("");
   const newTagRef = useRef<TextInput>(null);
 
+  // Unlock gate
+  const { isAiUnlocked } = useUnlock();
+  const [showUnlockModal, setShowUnlockModal] = useState(false);
+
   // Interview state
   const [interviewEnabled, setInterviewEnabled] = useState(false);
   const [contextNotes, setContextNotes] = useState<ContextNote[]>([]);
@@ -210,6 +216,11 @@ export default function NewRecordScreen() {
   };
 
   const handleToggleInterview = async () => {
+    if (!isAiUnlocked) {
+      if (Platform.OS !== "web") Haptics.selectionAsync();
+      setShowUnlockModal(true);
+      return;
+    }
     if (Platform.OS !== "web") Haptics.selectionAsync();
     if (!interviewEnabled) {
       setInterviewEnabled(true);
@@ -1498,6 +1509,16 @@ export default function NewRecordScreen() {
           </View>
         </KeyboardAwareScrollView>
       )}
+
+      <UnlockModal
+        visible={showUnlockModal}
+        featureName="AI Interviewer"
+        onClose={() => setShowUnlockModal(false)}
+        onUnlocked={async () => {
+          setInterviewEnabled(true);
+          await startInterview(selectedTags, contextNote ?? undefined, contextNotes);
+        }}
+      />
     </View>
   );
 }
