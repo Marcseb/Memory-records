@@ -18,6 +18,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRecords } from "@/context/RecordsContext";
 import { useSettings } from "@/context/SettingsContext";
 import { useObsidian } from "@/hooks/useObsidian";
+import { useHistoricalEvents } from "@/hooks/useHistoricalEvents";
 import { useColors } from "@/hooks/useColors";
 import { EmotionPicker } from "@/components/EmotionPicker";
 import { getEmotion } from "@/constants/emotions";
@@ -26,9 +27,10 @@ export default function RecordDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { records, updateRecord, deleteRecord, knownTags } = useRecords();
+  const { records, updateRecord, deleteRecord, addRecord, knownTags } = useRecords();
   const { settings } = useSettings();
   const { saveToObsidian } = useObsidian();
+  const { generate: generateEvents, isLoading: generatingEvents } = useHistoricalEvents();
   const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editedNote, setEditedNote] = useState("");
@@ -180,6 +182,36 @@ export default function RecordDetailScreen() {
       JSON.stringify({ note: record.note ?? "", tags: record.tags ?? [], contextYear: record.contextYear })
     );
     router.push({ pathname: "/new-record", params: { fromContext: "1" } });
+  };
+
+  const handleGenerateEvents = async () => {
+    if (!record.contextYear) return;
+    if (Platform.OS !== "web") await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const events = await generateEvents(
+      record.contextYear,
+      settings.voiceLanguage,
+      settings.maxInternationalEvents ?? 2,
+      settings.maxNationalEvents ?? 2,
+    );
+    if (events.length === 0) {
+      Alert.alert(
+        "Generation Failed",
+        "Could not generate historical events. Make sure your AI key is configured in Settings → AI Interviewer.",
+      );
+      return;
+    }
+    for (const ev of events) {
+      await addRecord(ev);
+    }
+    const intlCount = events.filter((e) => e.eventScope === "international").length;
+    const natCount = events.filter((e) => e.eventScope === "national").length;
+    const parts: string[] = [];
+    if (intlCount > 0) parts.push(`${intlCount} international`);
+    if (natCount > 0) parts.push(`${natCount} national`);
+    Alert.alert(
+      `${record.contextYear} Events Added`,
+      `Generated ${parts.join(" + ")} event${events.length !== 1 ? "s" : ""}. Find them highlighted in amber in your list.`,
+    );
   };
 
   const handleDelete = () => {
@@ -498,6 +530,39 @@ export default function RecordDetailScreen() {
       fontFamily: "Inter_600SemiBold",
       color: colors.accent,
     },
+    generateEventsBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+      backgroundColor: colors.historical,
+      borderRadius: colors.radius,
+      paddingVertical: 14,
+      borderWidth: 1.5,
+      borderColor: colors.historicalBorder,
+    },
+    generateEventsBtnText: {
+      fontSize: 15,
+      fontFamily: "Inter_600SemiBold",
+      color: colors.historicalForeground,
+    },
+    historicalEventBadge: {
+      alignSelf: "flex-start",
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      backgroundColor: colors.historicalBorder + "22",
+      borderRadius: 10,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderWidth: 1,
+      borderColor: colors.historicalBorder,
+    },
+    historicalEventBadgeText: {
+      fontSize: 12,
+      fontFamily: "Inter_600SemiBold",
+      color: colors.historicalForeground,
+    },
     obsidianBtn: {
       flexDirection: "row",
       alignItems: "center",
@@ -570,6 +635,19 @@ export default function RecordDetailScreen() {
         ) : null}
 
         <View style={s.content}>
+          {record.isHistoricalEvent && (
+            <View style={s.historicalEventBadge}>
+              <Feather
+                name={record.eventScope === "international" ? "globe" : "flag"}
+                size={13}
+                color={colors.historicalForeground}
+              />
+              <Text style={s.historicalEventBadgeText}>
+                {record.eventScope === "international" ? "International Event" : "National Event"}
+              </Text>
+            </View>
+          )}
+
           {record.savedToObsidian && (
             <View style={s.badge}>
               <Text style={s.badgeText}>Saved to Obsidian</Text>
@@ -827,6 +905,25 @@ export default function RecordDetailScreen() {
               <Text style={s.noteText}>{record.note || "No note added."}</Text>
             )}
           </View>
+
+          {!isEditing && record.contextYear !== undefined && !record.isHistoricalEvent && (
+            <Pressable
+              style={[s.generateEventsBtn, generatingEvents && { opacity: 0.65 }]}
+              onPress={handleGenerateEvents}
+              disabled={generatingEvents}
+            >
+              <Feather
+                name="globe"
+                size={18}
+                color={colors.historicalForeground}
+              />
+              <Text style={s.generateEventsBtnText}>
+                {generatingEvents
+                  ? "Generating events…"
+                  : `Generate ${record.contextYear} events`}
+              </Text>
+            </Pressable>
+          )}
 
           {!isEditing && (
             <Pressable

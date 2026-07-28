@@ -290,6 +290,17 @@ export default function SettingsScreen() {
     await updateSettings({ voiceLanguage: lang });
   };
 
+  const handleEventCount = async (type: "international" | "national", delta: number) => {
+    if (Platform.OS !== "web") await Haptics.selectionAsync();
+    if (type === "international") {
+      const next = Math.max(0, Math.min(5, (settings.maxInternationalEvents ?? 2) + delta));
+      await updateSettings({ maxInternationalEvents: next });
+    } else {
+      const next = Math.max(0, Math.min(5, (settings.maxNationalEvents ?? 2) + delta));
+      await updateSettings({ maxNationalEvents: next });
+    }
+  };
+
   const handleSaveAiKeys = async () => {
     setAiKeysSaving(true);
     try {
@@ -864,6 +875,97 @@ export default function SettingsScreen() {
           <Pressable style={s.saveBtn} onPress={handleSaveAiKeys} disabled={aiKeysSaving}>
             <Text style={s.saveBtnText}>{aiKeysSaving ? "Saving…" : "Save AI Keys"}</Text>
           </Pressable>
+        </View>
+
+        {/* Historical Events */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Historical Events</Text>
+          <View style={s.infoBox}>
+            <Text style={s.infoTitle}>AI-generated year context</Text>
+            <Text style={s.infoText}>
+              On any record that has a Memory Year set, tap{" "}
+              <Text style={{ fontFamily: "Inter_600SemiBold" }}>Generate [year] events</Text> to
+              create AI-written summaries of major events from that year.{"\n\n"}
+              International events have worldwide scope; national events are tied to your chosen
+              voice-to-text language country. Set a count to 0 to disable that type.
+              Generated notes appear highlighted in amber in your list.
+            </Text>
+          </View>
+          <View style={{ height: 12 }} />
+          <View style={s.card}>
+            {/* International stepper */}
+            <View style={[s.row, s.rowBorder]}>
+              <Feather name="globe" size={16} color={colors.primary} />
+              <Text style={s.rowLabel}>International events</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Pressable
+                  onPress={() => handleEventCount("international", -1)}
+                  disabled={(settings.maxInternationalEvents ?? 2) <= 0}
+                  hitSlop={8}
+                  style={{
+                    width: 30, height: 30, borderRadius: 15,
+                    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
+                    alignItems: "center", justifyContent: "center",
+                    opacity: (settings.maxInternationalEvents ?? 2) <= 0 ? 0.35 : 1,
+                  }}
+                >
+                  <Feather name="minus" size={14} color={colors.foreground} />
+                </Pressable>
+                <Text style={{ fontSize: 17, fontFamily: "Inter_600SemiBold", color: colors.foreground, minWidth: 20, textAlign: "center" }}>
+                  {settings.maxInternationalEvents ?? 2}
+                </Text>
+                <Pressable
+                  onPress={() => handleEventCount("international", +1)}
+                  disabled={(settings.maxInternationalEvents ?? 2) >= 5}
+                  hitSlop={8}
+                  style={{
+                    width: 30, height: 30, borderRadius: 15,
+                    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
+                    alignItems: "center", justifyContent: "center",
+                    opacity: (settings.maxInternationalEvents ?? 2) >= 5 ? 0.35 : 1,
+                  }}
+                >
+                  <Feather name="plus" size={14} color={colors.foreground} />
+                </Pressable>
+              </View>
+            </View>
+            {/* National stepper */}
+            <View style={s.row}>
+              <Feather name="flag" size={16} color={colors.primary} />
+              <Text style={s.rowLabel}>National events</Text>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Pressable
+                  onPress={() => handleEventCount("national", -1)}
+                  disabled={(settings.maxNationalEvents ?? 2) <= 0}
+                  hitSlop={8}
+                  style={{
+                    width: 30, height: 30, borderRadius: 15,
+                    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
+                    alignItems: "center", justifyContent: "center",
+                    opacity: (settings.maxNationalEvents ?? 2) <= 0 ? 0.35 : 1,
+                  }}
+                >
+                  <Feather name="minus" size={14} color={colors.foreground} />
+                </Pressable>
+                <Text style={{ fontSize: 17, fontFamily: "Inter_600SemiBold", color: colors.foreground, minWidth: 20, textAlign: "center" }}>
+                  {settings.maxNationalEvents ?? 2}
+                </Text>
+                <Pressable
+                  onPress={() => handleEventCount("national", +1)}
+                  disabled={(settings.maxNationalEvents ?? 2) >= 5}
+                  hitSlop={8}
+                  style={{
+                    width: 30, height: 30, borderRadius: 15,
+                    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
+                    alignItems: "center", justifyContent: "center",
+                    opacity: (settings.maxNationalEvents ?? 2) >= 5 ? 0.35 : 1,
+                  }}
+                >
+                  <Feather name="plus" size={14} color={colors.foreground} />
+                </Pressable>
+              </View>
+            </View>
+          </View>
         </View>
 
         {/* Backup */}

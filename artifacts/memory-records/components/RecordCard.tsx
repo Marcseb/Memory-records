@@ -73,21 +73,23 @@ export function RecordCard({
   const emotion = getEmotion(record.emotion);
   const showEmotion = emotion.key !== "neutral";
 
+  const isHistorical = !!record.isHistoricalEvent;
+
   const s = StyleSheet.create({
     card: {
-      backgroundColor: colors.card,
+      backgroundColor: isHistorical ? colors.historical : colors.card,
       borderRadius: colors.radius,
       marginHorizontal: 16,
       marginVertical: 6,
       flexDirection: "row",
       overflow: "hidden",
-      borderWidth: 1,
-      borderColor: colors.border,
-      shadowColor: "#000",
+      borderWidth: isHistorical ? 1.5 : 1,
+      borderColor: isHistorical ? colors.historicalBorder : colors.border,
+      shadowColor: isHistorical ? colors.historicalBorder : "#000",
       shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.06,
+      shadowOpacity: isHistorical ? 0.18 : 0.06,
       shadowRadius: 8,
-      elevation: 2,
+      elevation: isHistorical ? 3 : 2,
     },
     pressableArea: {
       flex: 1,
@@ -100,7 +102,7 @@ export function RecordCard({
     noPhotoThumb: {
       width: 88,
       height: 88,
-      backgroundColor: colors.surface,
+      backgroundColor: isHistorical ? colors.historicalBorder + "22" : colors.surface,
       alignItems: "center",
       justifyContent: "center",
       gap: 4,
@@ -120,7 +122,7 @@ export function RecordCard({
     date: {
       fontSize: 13,
       fontFamily: "Inter_600SemiBold",
-      color: colors.primary,
+      color: isHistorical ? colors.historicalForeground : colors.primary,
     },
     note: {
       fontSize: 14,
@@ -175,6 +177,10 @@ export function RecordCard({
       alignItems: "center",
       justifyContent: "center",
     },
+    historicalStripe: {
+      width: 4,
+      backgroundColor: colors.historicalBorder,
+    },
     // Reorder mode right column
     reorderCol: {
       width: 38,
@@ -214,6 +220,9 @@ export function RecordCard({
 
   return (
     <Animated.View style={[s.card, animatedStyle]}>
+      {/* Amber accent stripe for historical events */}
+      {isHistorical && <View style={s.historicalStripe} />}
+
       {/* Tappable area — thumbnail + content */}
       <Pressable
         style={s.pressableArea}
@@ -224,13 +233,18 @@ export function RecordCard({
         {record.imageUri ? (
           <Image source={{ uri: record.imageUri }} style={s.thumbnail} contentFit="cover" />
         ) : (
-          <Pressable style={s.noPhotoThumb} onPress={onAddPhoto} hitSlop={4}>
+          <Pressable style={s.noPhotoThumb} onPress={isHistorical ? undefined : onAddPhoto} hitSlop={4}>
             <Feather
-              name="camera"
+              name={isHistorical ? (record.eventScope === "international" ? "globe" : "flag") : "camera"}
               size={22}
-              color={onAddPhoto ? colors.primary : colors.mutedForeground}
+              color={isHistorical ? colors.historicalForeground : onAddPhoto ? colors.primary : colors.mutedForeground}
             />
-            {onAddPhoto && <Text style={s.noPhotoHint}>Add photo</Text>}
+            {!isHistorical && onAddPhoto && <Text style={s.noPhotoHint}>Add photo</Text>}
+            {isHistorical && (
+              <Text style={[s.noPhotoHint, { color: colors.historicalForeground }]}>
+                {record.eventScope === "international" ? "World" : "National"}
+              </Text>
+            )}
           </Pressable>
         )}
         <View style={s.content}>
@@ -270,6 +284,13 @@ export function RecordCard({
                 <Feather name="map-pin" size={11} color={colors.mutedForeground} />
                 <Text style={s.metaText} numberOfLines={1}>{record.location}</Text>
               </>
+            ) : null}
+            {isHistorical ? (
+              <View style={[s.badge, { backgroundColor: colors.historicalBorder + "22" }]}>
+                <Text style={[s.badgeText, { color: colors.historicalForeground }]}>
+                  {record.eventScope === "international" ? "🌐 World" : "🏛️ National"}
+                </Text>
+              </View>
             ) : null}
             {record.savedToObsidian ? (
               <View style={s.badge}>

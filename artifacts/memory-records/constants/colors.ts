@@ -32,6 +32,11 @@ const colors = {
 
     surface: "#f0efff",
     surfaceElevated: "#ffffff",
+
+    /** Historical event cards — warm amber */
+    historical: "#FFF8E0",
+    historicalBorder: "#D4A017",
+    historicalForeground: "#7A5F00",
   },
 
   dark: {
@@ -67,6 +72,11 @@ const colors = {
 
     surface: "#14142a",
     surfaceElevated: "#1a1a2e",
+
+    /** Historical event cards — deep amber */
+    historical: "#221E00",
+    historicalBorder: "#5C4A00",
+    historicalForeground: "#E8C84A",
   },
 
   radius: 14,

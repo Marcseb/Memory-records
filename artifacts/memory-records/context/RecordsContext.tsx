@@ -11,6 +11,10 @@ export interface MemoryRecord {
   contextYear?: number;
   /** Ordering rank within the same contextYear group (1-based, ascending = earlier in year) */
   yearRank?: number;
+  /** True for AI-generated historical event notes */
+  isHistoricalEvent?: boolean;
+  /** Scope of the historical event */
+  eventScope?: "international" | "national";
   location?: string;
   lat?: number;
   lng?: number;

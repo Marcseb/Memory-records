@@ -62,6 +62,9 @@ function formatMarkdown(record: MemoryRecord, authorName?: string): string {
   if (record.yearRank !== undefined) {
     lines.push(`**Year rank:** ${record.yearRank}`);
   }
+  if (record.isHistoricalEvent) {
+    lines.push(`**Event type:** ${record.eventScope === "national" ? "National" : "International"}`);
+  }
   if (record.tags && record.tags.length > 0) {
     lines.push(`**Tags:** ${record.tags.map((t) => `#${t}`).join("  ")}`);
   }

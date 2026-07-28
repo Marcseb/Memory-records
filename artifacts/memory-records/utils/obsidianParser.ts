@@ -63,6 +63,12 @@ export function parseObsidianNote(
     if (!isNaN(yr) && yr > 0) record.yearRank = yr;
   }
 
+  const eventType = extractField(text, "Event type");
+  if (eventType) {
+    record.isHistoricalEvent = true;
+    record.eventScope = eventType.toLowerCase() === "national" ? "national" : "international";
+  }
+
   const tagsStr = extractField(text, "Tags");
   if (tagsStr) {
     const tags = tagsStr

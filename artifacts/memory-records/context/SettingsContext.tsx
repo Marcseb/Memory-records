@@ -15,6 +15,10 @@ interface AppSettings {
   configured: boolean;
   voiceLanguage: VoiceLanguage;
   authorName: string;
+  /** Maximum number of international historical events generated per year (default 2) */
+  maxInternationalEvents: number;
+  /** Maximum number of national historical events generated per year (default 2) */
+  maxNationalEvents: number;
 }
 
 interface SettingsContextType {
@@ -33,6 +37,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   configured: false,
   voiceLanguage: "fr-FR",
   authorName: "",
+  maxInternationalEvents: 2,
+  maxNationalEvents: 2,
 };
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
