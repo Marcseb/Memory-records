@@ -2,6 +2,7 @@ import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
+import { deleteAppVideo } from "@/utils/storage";
 import { Image } from "expo-image";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, useLocalSearchParams } from "expo-router";
@@ -213,6 +214,12 @@ export default function NewRecordScreen() {
     setVideoLoading(true);
     setMode("photo");
     setPhoto(null);
+
+    // If the user is replacing an already-picked video, delete the old copy.
+    if (video?.uri) {
+      await deleteAppVideo(video.uri);
+      setVideo(null);
+    }
 
     try {
       const asset = result.assets[0];

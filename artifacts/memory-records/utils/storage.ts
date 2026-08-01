@@ -68,3 +68,21 @@ export async function deleteJsonFile(filename: string): Promise<void> {
     // ignore
   }
 }
+
+/**
+ * Delete a video (or any media) file that the app copied into documentDirectory.
+ * Silently does nothing if the URI is undefined, empty, or not inside the app's
+ * document directory — so it is safe to call on any stored videoUri without
+ * worrying about accidentally removing gallery originals.
+ */
+export async function deleteAppVideo(uri: string | undefined): Promise<void> {
+  if (!uri || !DIR || !uri.startsWith(DIR)) return;
+  try {
+    const info = await FileSystem.getInfoAsync(uri);
+    if (info.exists) {
+      await FileSystem.deleteAsync(uri);
+    }
+  } catch {
+    // ignore — file may already be gone
+  }
+}

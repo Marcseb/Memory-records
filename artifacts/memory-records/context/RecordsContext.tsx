@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { readJsonFile, writeJsonFile, deleteJsonFile } from "@/utils/storage";
+import { readJsonFile, writeJsonFile, deleteJsonFile, deleteAppVideo } from "@/utils/storage";
 
 export interface MemoryRecord {
   id: string;
@@ -92,7 +92,13 @@ export function RecordsProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const deleteRecord = useCallback(async (id: string) => {
+    // Find the record first so we can clean up its video file before removal.
     setRecords((prev) => {
+      const target = prev.find((r) => r.id === id);
+      if (target?.videoUri) {
+        // Fire-and-forget — deletion is best-effort.
+        deleteAppVideo(target.videoUri).catch(() => {});
+      }
       const next = prev.filter((r) => r.id !== id);
       saveRecords(next);
       return next;

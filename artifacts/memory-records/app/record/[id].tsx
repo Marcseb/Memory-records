@@ -3,6 +3,7 @@ import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
+import { deleteAppVideo } from "@/utils/storage";
 import { VideoPlayerModal } from "@/components/VideoPlayerModal";
 import { PhotoViewerModal } from "@/components/PhotoViewerModal";
 import { router, useLocalSearchParams } from "expo-router";
@@ -709,6 +710,8 @@ export default function RecordDetailScreen() {
       } catch { /* thumbnail optional */ }
 
       if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Delete the previous video copy before saving the replacement.
+      await deleteAppVideo(record.videoUri);
       await updateRecord(record.id, { videoUri: destUri, videoThumbnailUri: thumbnailUri });
     } catch {
       Alert.alert("Error", "Could not load video. Please try again.");
@@ -716,9 +719,16 @@ export default function RecordDetailScreen() {
   };
 
   const handleRemoveVideo = () => {
-    Alert.alert("Remove video", "Remove the video from this record? The file will remain on your device.", [
+    Alert.alert("Remove video", "Remove the video from this record?", [
       { text: "Cancel", style: "cancel" },
-      { text: "Remove", style: "destructive", onPress: () => updateRecord(record.id, { videoUri: undefined, videoThumbnailUri: undefined }) },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: async () => {
+          await deleteAppVideo(record.videoUri);
+          await updateRecord(record.id, { videoUri: undefined, videoThumbnailUri: undefined });
+        },
+      },
     ]);
   };
 
