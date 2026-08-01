@@ -292,7 +292,7 @@ export function UnlockModal({ visible, featureName, onClose, onUnlocked }: Props
           {/* Description */}
           <Text style={s.desc}>
             <Text style={s.strong}>{featureName}</Text> is part of the AI feature pack.
-            A small contribution of <Text style={s.strong}>€5</Text> unlocks both AI
+            A small contribution of <Text style={s.strong}>€5</Text> unlocks all AI
             features permanently on this device and helps keep Memory Records free
             and open-source.
           </Text>
@@ -306,6 +306,10 @@ export function UnlockModal({ visible, featureName, onClose, onUnlocked }: Props
             <View style={s.featureRow}>
               <Feather name="globe" size={15} color={colors.historicalForeground} />
               <Text style={s.featureText}>Historical Events — AI-written year context</Text>
+            </View>
+            <View style={s.featureRow}>
+              <Feather name="video" size={15} color={colors.primary} />
+              <Text style={s.featureText}>Video — attach video clips to memories</Text>
             </View>
           </View>
 
