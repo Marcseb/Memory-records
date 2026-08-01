@@ -256,21 +256,33 @@ export default function NewRecordScreen() {
       // Try to get the actual recording date — three strategies in order of reliability
       let videoDate: string | undefined;
 
-      // 1. Media library creationTime via assetId (iOS; assetId is null on Android)
+      // 1. Media library creationTime
+      //    - iOS: use assetId directly (e.g. "CC95F08C-88C3-4012-9D6D-64A413D254B3/L0/001")
+      //    - Android: assetId is null, but the numeric ID at the end of the content URI
+      //      (content://media/external/video/media/12345) is the MediaLibrary asset ID
       try {
-        if (asset.assetId) {
+        let assetRef: string | null = asset.assetId ?? null;
+        if (!assetRef && asset.uri.startsWith("content://")) {
+          const tail = asset.uri.split("/").pop() ?? "";
+          if (/^\d+$/.test(tail)) assetRef = tail;
+        }
+        if (assetRef) {
           const { getAssetInfoAsync } = await import("expo-media-library");
-          const info = await getAssetInfoAsync(asset.assetId);
+          const info = await getAssetInfoAsync(assetRef);
           if (info.creationTime) {
-            const d = new Date(info.creationTime * 1000);
-            videoDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+            // Normalise: some platforms return seconds, others milliseconds
+            const ms = info.creationTime > 1e11 ? info.creationTime : info.creationTime * 1000;
+            const d = new Date(ms);
+            if (d.getFullYear() >= 1990 && d.getFullYear() <= new Date().getFullYear() + 1) {
+              videoDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+            }
           }
         }
       } catch {
         /* silent — try next strategy */
       }
 
-      // 2. Parse date from filename (reliable on Android: VID_20220315_143022.mp4)
+      // 2. Parse date from filename (works when camera names files: VID_20220315_143022.mp4)
       if (!videoDate) {
         videoDate = parseDateFromVideoFilename(asset.fileName, asset.uri);
       }
