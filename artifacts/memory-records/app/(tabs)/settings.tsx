@@ -28,6 +28,7 @@ import { VoiceLanguage, VOICE_LANGUAGES, useSettings } from "@/context/SettingsC
 import { useUnlock } from "@/context/UnlockContext";
 import { UnlockModal } from "@/components/UnlockModal";
 import { useColors } from "@/hooks/useColors";
+import { useObsidian } from "@/hooks/useObsidian";
 import { isObsidianMarkdown, parseMultipleObsidianNotes, parseObsidianNote } from "@/utils/obsidianParser";
 
 export default function SettingsScreen() {
@@ -43,6 +44,9 @@ export default function SettingsScreen() {
   const [importModalVisible, setImportModalVisible] = useState(false);
   const [importText, setImportText] = useState("");
   const [importing, setImporting] = useState(false);
+
+  const { exportAllToObsidian } = useObsidian();
+  const [exportingToObsidian, setExportingToObsidian] = useState(false);
 
   const { isAiUnlocked, checkStatus, isChecking } = useUnlock();
   const [showUnlockModal, setShowUnlockModal] = useState(false);
@@ -288,6 +292,41 @@ export default function SettingsScreen() {
     });
     setSaving(false);
     Alert.alert("Saved", "Settings updated.");
+  };
+
+  const handleExportAllToObsidian = async () => {
+    if (exportingToObsidian) return;
+    Alert.alert(
+      `Export ${records.length} note${records.length !== 1 ? "s" : ""} to Obsidian`,
+      "Each note will be sent to Obsidian one by one. Obsidian will open and switch back repeatedly — this is normal. Re-exporting a note overwrites the existing file in your vault.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Export all",
+          onPress: async () => {
+            setExportingToObsidian(true);
+            if (Platform.OS !== "web") await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            const result = await exportAllToObsidian();
+            setExportingToObsidian(false);
+            if (result.total === 0) {
+              Alert.alert("Nothing to export", "No records found.");
+              return;
+            }
+            if (result.failed === 0) {
+              Alert.alert(
+                "Export complete ✓",
+                `${result.exported} note${result.exported !== 1 ? "s" : ""} sent to Obsidian.`
+              );
+            } else {
+              Alert.alert(
+                "Export finished",
+                `${result.exported} sent, ${result.failed} failed.\n\nMake sure Obsidian is installed with the Actions URI plugin enabled.`
+              );
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleLanguageSelect = async (lang: VoiceLanguage) => {
@@ -818,6 +857,35 @@ export default function SettingsScreen() {
               {saving ? "Saving..." : "Save Settings"}
             </Text>
           </Pressable>
+          {settings.configured && (
+            <>
+              <View style={{ height: 10 }} />
+              <Pressable
+                style={[
+                  s.saveBtn,
+                  {
+                    backgroundColor: colors.card,
+                    borderWidth: 1,
+                    borderColor: colors.border,
+                    flexDirection: "row",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    gap: 8,
+                    opacity: exportingToObsidian ? 0.6 : 1,
+                  },
+                ]}
+                onPress={handleExportAllToObsidian}
+                disabled={exportingToObsidian}
+              >
+                <Feather name="upload" size={15} color={colors.foreground} />
+                <Text style={[s.saveBtnText, { color: colors.foreground }]}>
+                  {exportingToObsidian
+                    ? "Exporting…"
+                    : `Export all ${records.length} note${records.length !== 1 ? "s" : ""} to Obsidian`}
+                </Text>
+              </Pressable>
+            </>
+          )}
         </View>
 
         {/* AI Features Unlock */}

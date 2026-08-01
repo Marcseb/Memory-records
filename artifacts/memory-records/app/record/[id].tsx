@@ -97,7 +97,6 @@ export default function RecordDetailScreen() {
       return;
     }
     const yearChanged = editedYear !== record.contextYear;
-    const primaryTagChanged = editedTags[0] !== record.tags?.[0];
     const tagsChanged = JSON.stringify(editedTags) !== JSON.stringify(record.tags ?? []);
     const emotionChanged = editedEmotion !== (record.emotion ?? "neutral");
     if (trimmed === record.note && !yearChanged && !tagsChanged && !emotionChanged) {
@@ -108,43 +107,13 @@ export default function RecordDetailScreen() {
 
     const newTags = editedTags.length > 0 ? editedTags : undefined;
     const newEditCount = (record.editCount ?? 0) + 1;
-    const updatedRecord = { ...record, note: trimmed, contextYear: editedYear, tags: newTags, emotion: editedEmotion, editCount: newEditCount };
 
     await updateRecord(record.id, { note: trimmed, contextYear: editedYear, tags: newTags, emotion: editedEmotion, editCount: newEditCount });
     setIsEditing(false);
     setEditedNote("");
     setEditedTags([]);
 
-    if (settings.configured) {
-      setSaving(true);
-      // When contextYear or the primary tag changed, the stored filename base
-      // is stale — clear it so buildFilename recomputes from scratch.
-      const needsRebuild = yearChanged || primaryTagChanged;
-      const recordForObsidian = needsRebuild
-        ? { ...updatedRecord, filename: undefined }
-        : updatedRecord;
-      const result = await saveToObsidian(recordForObsidian);
-      if (result.ok) {
-        // Derive the new base by stripping the version suffix (_v2, _v3 …).
-        const newFilenameBase = needsRebuild
-          ? result.filename.replace(/_v\d+$/, "")
-          : (record.filename ?? result.filename);
-        await updateRecord(record.id, { savedToObsidian: true, filename: newFilenameBase });
-        if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert(
-          "Saved & Sent",
-          `Note updated locally and sent to Obsidian as version v${newEditCount + 1}.`
-        );
-      } else if (result.reason === "open_failed") {
-        Alert.alert(
-          "Saved Locally",
-          "Note updated in the app. Could not open Obsidian automatically — tap \"Save to Obsidian\" to retry."
-        );
-      }
-      setSaving(false);
-    } else {
-      Alert.alert("Saved", "Note updated.");
-    }
+    Alert.alert("Saved", "Note updated.");
   };
 
   const handleSaveToObsidian = async () => {
@@ -964,7 +933,7 @@ export default function RecordDetailScreen() {
                   </Pressable>
                   <Pressable style={s.editSaveInline} onPress={handleSaveEdit} disabled={saving}>
                     <Text style={s.editSaveInlineText}>
-                      {saving ? "Saving…" : settings.configured ? "Save & Send to Obsidian" : "Save"}
+                      {saving ? "Saving…" : "Save"}
                     </Text>
                   </Pressable>
                 </View>

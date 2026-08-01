@@ -23,7 +23,6 @@ import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { EmotionPicker } from "@/components/EmotionPicker";
 import { MemoryRecord, useRecords } from "@/context/RecordsContext";
 import { useSettings } from "@/context/SettingsContext";
-import { useObsidian } from "@/hooks/useObsidian";
 import { useInterview, ContextNote } from "@/hooks/useInterview";
 import { useColors } from "@/hooks/useColors";
 import { useUnlock } from "@/context/UnlockContext";
@@ -85,9 +84,8 @@ function normalizeTag(raw: string): string {
 export default function NewRecordScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { records, addRecord, updateRecord, knownTags, addTag } = useRecords();
+  const { records, addRecord, knownTags, addTag } = useRecords();
   const { settings } = useSettings();
-  const { saveToObsidian } = useObsidian();
 
   // Context passed from an existing record's "New note" button
   const { fromContext } = useLocalSearchParams<{ fromContext?: string }>();
@@ -317,19 +315,6 @@ export default function NewRecordScreen() {
     };
 
     await addRecord(record);
-
-    if (settings.configured) {
-      const result = await saveToObsidian(record);
-      if (result.ok) {
-        await updateRecord(record.id, { savedToObsidian: true, filename: result.filename });
-      } else if (result.reason === "open_failed") {
-        Alert.alert(
-          "Cannot Open Obsidian",
-          "Record saved locally. Open the record and tap \"Save to Obsidian\" when ready.\n\n" +
-            "Make sure Obsidian is installed with the Actions URI plugin enabled."
-        );
-      }
-    }
 
     setIsSaving(false);
 

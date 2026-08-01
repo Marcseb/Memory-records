@@ -2,53 +2,17 @@ import * as Linking from "expo-linking";
 import { useSettings } from "@/context/SettingsContext";
 import { MemoryRecord, useRecords } from "@/context/RecordsContext";
 
-function sanitizeFilename(name: string): string {
-  return name.replace(/[\\/:*?"<>|]/g, "_").replace(/\s+/g, "_");
-}
-
-/**
- * Convert ISO date (yyyy-mm-dd) to European display format (dd-mm-yyyy).
- */
-function isoToDMY(iso: string): string {
-  const parts = iso.split("-");
-  if (parts.length !== 3) return iso;
-  return `${parts[2]}-${parts[1]}-${parts[0]}`;
-}
-
 /**
  * Build the Obsidian note filename.
  *
- * Original:       dd-mm-yyyy_tag_NN        e.g. 24-04-2026_sports_01
- * After 1st edit: dd-mm-yyyy_tag_NN_v2     e.g. 24-04-2026_sports_01_v2
- * After 2nd edit: dd-mm-yyyy_tag_NN_v3     ...
+ * Format: YYYY-MM-DD
+ * Same-date duplicates: YYYY-MM-DD_2, YYYY-MM-DD_3, …
  *
- * If the record already has a stored base filename, versioning is anchored to it
- * so renames caused by tag changes don't break the version chain.
+ * sameDateOrder is 1-based: 1 = first note on that date (no suffix).
  */
-function buildFilename(record: MemoryRecord, tagOrder: number): string {
-  const editCount = record.editCount ?? 0;
-
-  // Base filename: use stored original if available, otherwise compute fresh
-  let base: string;
-  if (record.filename) {
-    base = record.filename;
-  } else {
-    const dmy = isoToDMY(record.date);
-    const primaryTag = record.tags?.[0];
-    if (primaryTag) {
-      const nn = String(tagOrder).padStart(2, "0");
-      const yearPart = record.contextYear !== undefined ? `_${record.contextYear}` : "";
-      base = sanitizeFilename(`${dmy}_${primaryTag}${yearPart}_${nn}`);
-    } else {
-      const yearPart = record.contextYear !== undefined ? `_${record.contextYear}` : "";
-      base = sanitizeFilename(`${dmy}${yearPart}_${record.id.substring(0, 8)}`);
-    }
-  }
-
-  if (editCount > 0) {
-    return `${base}_v${editCount + 1}`;
-  }
-  return base;
+function buildFilename(record: MemoryRecord, sameDateOrder: number): string {
+  if (sameDateOrder <= 1) return record.date;
+  return `${record.date}_${sameDateOrder}`;
 }
 
 function formatMarkdown(record: MemoryRecord, authorName?: string): string {
@@ -96,6 +60,33 @@ export type ObsidianResult =
   | { ok: true; filename: string }
   | { ok: false; reason: "not_configured" | "open_failed"; error?: unknown };
 
+export type ObsidianBulkResult = {
+  exported: number;
+  failed: number;
+  total: number;
+};
+
+/**
+ * Return the stable 1-based position of a record among all records that share
+ * its date, sorted ascending by createdAt.
+ *
+ * This is used by both saveToObsidian (single) and exportAllToObsidian (bulk)
+ * so the two paths always produce the same filename for the same record.
+ *
+ * Examples (three records on 2026-01-15, oldest first):
+ *   oldest  → 2026-01-15        (order 1, no suffix)
+ *   middle  → 2026-01-15_2
+ *   newest  → 2026-01-15_3
+ */
+export function sameDateOrder(record: MemoryRecord, allRecords: MemoryRecord[]): number {
+  const siblings = allRecords
+    .filter((r) => r.date === record.date)
+    .sort((a, b) => a.createdAt - b.createdAt);
+  const idx = siblings.findIndex((r) => r.id === record.id);
+  // If the record isn't found (e.g. not yet saved to state), treat it as last.
+  return idx === -1 ? siblings.length + 1 : idx + 1;
+}
+
 export function useObsidian() {
   const { settings } = useSettings();
   const { records } = useRecords();
@@ -107,15 +98,11 @@ export function useObsidian() {
       return { ok: false, reason: "not_configured" };
     }
 
-    // Compute sequential order number for the primary tag (first in array).
-    // At the time of calling, the current record may or may not be in the
-    // records list yet (React state batching), so we exclude it by id and add 1.
-    const primaryTag = record.tags?.[0];
-    const tagOrder = primaryTag
-      ? records.filter((r) => r.tags?.[0] === primaryTag && r.id !== record.id).length + 1
-      : 1;
-
-    const filename = buildFilename(record, tagOrder);
+    // Stable 1-based position among same-date records (sorted by createdAt).
+    // Using position rather than a headcount of "other records" ensures each
+    // record gets a unique filename even when overwrite=true.
+    const order = sameDateOrder(record, records);
+    const filename = buildFilename(record, order);
     const content = formatMarkdown(record, settings.authorName || undefined);
     const filePath = settings.folder
       ? `${settings.folder}/${filename}`
@@ -130,7 +117,7 @@ export function useObsidian() {
       `?vault=${encodeURIComponent(settings.vaultName)}` +
       `&file=${encodeURIComponent(filePath)}` +
       `&content=${encodeURIComponent(content)}` +
-      `&overwrite=false`;
+      `&overwrite=true`;
 
     try {
       await Linking.openURL(uri);
@@ -141,5 +128,54 @@ export function useObsidian() {
     }
   };
 
-  return { saveToObsidian };
+  /**
+   * Export every record to Obsidian one by one.
+   * Filenames follow YYYY-MM-DD (with _2, _3 suffix for same-date duplicates).
+   * overwrite=true so re-exports after edits update the file.
+   */
+  const exportAllToObsidian = async (): Promise<ObsidianBulkResult> => {
+    if (!settings.vaultName.trim()) {
+      return { exported: 0, failed: 0, total: 0 };
+    }
+
+    // Sort by createdAt ascending so the per-date counter matches the stable
+    // order produced by sameDateOrder() in the single-record path.
+    const sorted = [...records].sort((a, b) => a.createdAt - b.createdAt);
+    const dateCounts = new Map<string, number>();
+
+    let exported = 0;
+    let failed = 0;
+
+    for (const record of sorted) {
+      const order = (dateCounts.get(record.date) ?? 0) + 1;
+      dateCounts.set(record.date, order);
+
+      const filename = buildFilename(record, order);
+      const content = formatMarkdown(record, settings.authorName || undefined);
+      const filePath = settings.folder
+        ? `${settings.folder}/${filename}`
+        : filename;
+
+      const uri =
+        `obsidian://actions-uri/note/create` +
+        `?vault=${encodeURIComponent(settings.vaultName)}` +
+        `&file=${encodeURIComponent(filePath)}` +
+        `&content=${encodeURIComponent(content)}` +
+        `&overwrite=true`;
+
+      try {
+        await Linking.openURL(uri);
+        exported++;
+        // Small pause so Obsidian can process each note before the next arrives.
+        await new Promise((r) => setTimeout(r, 300));
+      } catch (err) {
+        console.warn("[Obsidian] bulk export openURL failed:", err);
+        failed++;
+      }
+    }
+
+    return { exported, failed, total: records.length };
+  };
+
+  return { saveToObsidian, exportAllToObsidian };
 }
