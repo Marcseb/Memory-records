@@ -95,7 +95,7 @@ export default function NewRecordScreen() {
 
   const [mode, setMode] = useState<"photo" | "note" | null>(null);
   const [photo, setPhoto] = useState<PhotoData | null>(null);
-  const [video, setVideo] = useState<{ uri: string; thumbnailUri: string | null } | null>(null);
+  const [video, setVideo] = useState<{ uri: string; thumbnailUri: string | null; date?: string } | null>(null);
   const [videoLoading, setVideoLoading] = useState(false);
   const [note, setNote] = useState("");
   const [manualDate, setManualDate] = useState(todayString());
@@ -236,7 +236,20 @@ export default function NewRecordScreen() {
         /* thumbnail optional — play-icon fallback shown */
       }
 
-      setVideo({ uri: destUri, thumbnailUri });
+      // Try to read the file's modification time as the video date
+      let videoDate: string | undefined;
+      try {
+        const info = await FileSystem.getInfoAsync(asset.uri);
+        if (info.exists && (info as { modificationTime?: number }).modificationTime) {
+          const d = new Date(((info as { modificationTime?: number }).modificationTime ?? 0) * 1000);
+          videoDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        }
+      } catch {
+        /* date optional */
+      }
+
+      setVideo({ uri: destUri, thumbnailUri, date: videoDate });
+      if (videoDate) setManualDate(videoDate);
     } catch {
       Alert.alert("Error", "Could not load video. Please try again.");
       setMode(null);
@@ -390,6 +403,7 @@ export default function NewRecordScreen() {
   };
 
   const hasExifDate = photo?.hasMetadata && !!photo.date;
+  const hasVideoDate = !!video?.date;
   const showContent = mode !== null;
 
   const s = StyleSheet.create({
@@ -1281,12 +1295,23 @@ export default function NewRecordScreen() {
                   </View>
                 ) : null}
               </View>
+            ) : hasVideoDate ? (
+              <View style={s.metaBox}>
+                <View style={s.metaRow}>
+                  <Feather name="video" size={14} color={colors.primary} />
+                  <Text style={s.metaText}>
+                    Video recorded: <Text style={s.metaHighlight}>{video?.date}</Text>
+                  </Text>
+                </View>
+              </View>
             ) : (
               <View style={{ gap: 8 }}>
                 {mode === "photo" && (
                   <View style={s.warningBox}>
                     <Ionicons name="information-circle-outline" size={16} color={colors.accent} />
-                    <Text style={s.warningText}>No date metadata found in this photo. Enter the date manually.</Text>
+                    <Text style={s.warningText}>
+                      {video ? "No date metadata found for this video." : "No date metadata found in this photo."} Enter the date manually.
+                    </Text>
                   </View>
                 )}
                 <TextInput
