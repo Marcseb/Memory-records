@@ -58,7 +58,8 @@ Your memory is stored locally, instantly, with no upload.
 
 ## Capturing memories
 
-- **Photo from gallery** — EXIF metadata (date, GPS, location) is extracted automatically; no manual entry needed.
+- **Photo from gallery** — EXIF metadata (date, GPS, location) is extracted automatically; no manual entry needed. Tap the photo on the detail screen to view it full-screen. A camera overlay on any card lets you replace the photo at any time.
+- **Video clip** *(Pro)* — pick a short video from your gallery. The first frame is extracted as a thumbnail and shown on the card. Tap the thumbnail on the detail screen to play the video full-screen. Requires the AI feature pack to be unlocked.
 - **Clipboard paste** — paste a screenshot or image copied from another app. If no EXIF date is found, the app prompts you to enter one.
 - **Text-only note** — write a note without any photo; useful for thoughts or conversations.
 - **Voice-to-text** — dictate your note hands-free. Speech recognition runs on-device in French, Italian, or English.
@@ -94,7 +95,7 @@ The first time any note in a year is moved, all notes in that year are automatic
 
 ## Unlocking AI Features
 
-The **AI Interviewer** and **Historical Events** generator are grouped into a single AI feature pack, unlocked by a one-time **€5 contribution via PayPal**. All other features (capturing memories, sorting, tags, emotions, year ranks, Obsidian export/import, JSON backup) remain fully free and require no payment.
+The **AI Interviewer**, **Historical Events** generator, and **Video Attachments** are grouped into a single AI feature pack, unlocked by a one-time **€5 contribution via PayPal**. All other features (capturing memories, sorting, tags, emotions, year ranks, Obsidian export/import, JSON backup) remain fully free and require no payment.
 
 ### How to unlock
 
@@ -173,6 +174,15 @@ Memory Records can save notes directly into your **Obsidian vault** as Markdown 
 > Both Obsidian and Memory Records must be installed on the same device. The app opens Obsidian via a deep link — no Wi-Fi or server needed.
 
 Each saved note includes the date, memory year, year rank, tags, emotion, event type (for historical notes), photo path, GPS coordinates, location name, and your full text, formatted in Markdown and fully searchable inside Obsidian.
+
+### Bulk export
+
+In **Settings → Obsidian Integration**, tap **Export all N notes to Obsidian** to export every note at once:
+
+- **Android** — a folder picker opens; the app writes `.md` files directly into your vault via the Storage Access Framework. A live counter (`Writing 3 / 47…`) is shown during export.
+- **iOS** — a ZIP archive is created and shared via the system share sheet. Save it to the Files app, then tap it to let iOS extract it automatically into your vault folder. A step-by-step extraction guide (using your actual vault name) is shown after sharing.
+
+File names follow the format `YYYY-MM-DD[_tag][_year][_N].md` — the primary tag and memory year are embedded in the filename when present, making notes instantly browsable in Obsidian's file tree.
 
 ---
 

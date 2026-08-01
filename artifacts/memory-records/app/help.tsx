@@ -190,7 +190,10 @@ export default function HelpScreen() {
 
         <Section icon="camera" title="Capturing memories">
           <Bullet>
-            <Text style={s.strong}>Photo from gallery</Text> — pick any photo and the app automatically reads its EXIF metadata: date taken, GPS coordinates, and location name. You don't need to fill anything in manually.
+            <Text style={s.strong}>Photo from gallery</Text> — pick any photo and the app automatically reads its EXIF metadata: date taken, GPS coordinates, and location name. Tap the photo on the detail screen to view it full-screen. A camera icon overlay on any card lets you replace the photo at any time.
+          </Bullet>
+          <Bullet>
+            <Text style={s.strong}>Video clip</Text> <Text style={[s.strong, { color: colors.primary }]}>(Pro)</Text> — pick a short video from your gallery. The first frame is extracted as a thumbnail shown on the card and detail screen. Tap the thumbnail to play the video in a full-screen player with native controls. Requires the AI feature pack.
           </Bullet>
           <Bullet>
             <Text style={s.strong}>Clipboard paste</Text> — paste a screenshot or image copied from another app. If no EXIF date is found, the app prompts you to enter one.
@@ -235,10 +238,10 @@ export default function HelpScreen() {
 
         <Section icon="lock" title="Unlocking AI Features">
           <Bullet>
-            The <Text style={s.strong}>AI Interviewer</Text> and <Text style={s.strong}>Historical Events</Text> generator are grouped into a single AI feature pack, unlocked by a one-time <Text style={s.strong}>€5 contribution via PayPal</Text>. All other features — capturing memories, sorting, tags, emotions, year ranks, Obsidian export, JSON backup — remain fully free with no payment required.
+            The <Text style={s.strong}>AI Interviewer</Text>, <Text style={s.strong}>Historical Events</Text> generator, and <Text style={s.strong}>Video Attachments</Text> are grouped into a single AI feature pack, unlocked by a one-time <Text style={s.strong}>€5 contribution via PayPal</Text>. All other features — capturing memories, sorting, tags, emotions, year ranks, Obsidian export, JSON backup — remain fully free with no payment required.
           </Bullet>
           <Bullet>
-            Open <Text style={s.strong}>Settings → AI Features</Text> and tap <Text style={s.strong}>Unlock</Text>, or tap the lock icon on the <Text style={s.strong}>Start interview</Text> toggle or <Text style={s.strong}>Generate [year] events</Text> button. The unlock sheet appears.
+            Open <Text style={s.strong}>Settings → AI Features</Text> and tap <Text style={s.strong}>Unlock</Text>, or tap the lock icon on the <Text style={s.strong}>Start interview</Text> toggle, <Text style={s.strong}>Generate [year] events</Text> button, or <Text style={s.strong}>Video</Text> mode tile. The unlock sheet appears.
           </Bullet>
           <Bullet>
             The sheet shows your <Text style={s.strong}>device ID</Text> — a unique token tied to this installation. Copy it or note it.
@@ -335,9 +338,13 @@ export default function HelpScreen() {
           <Bullet>
             On the record detail screen, tap <Text style={s.strong}>Save to Obsidian</Text> — the app opens Obsidian via a deep link and creates the note automatically. Both apps must be installed on the same device.
           </Bullet>
+          <Bullet>
+            <Text style={s.strong}>Bulk export</Text> — in Settings → Obsidian Integration, tap <Text style={s.strong}>Export all N notes to Obsidian</Text> to export everything at once. On Android a folder picker opens and the app writes files directly into your vault (a live counter shows progress). On iPhone a ZIP is created and shared via the share sheet — save it to Files, tap it to extract, then move the folder into your vault. A step-by-step guide appears automatically after sharing.
+          </Bullet>
           <View style={{ height: 10 }} />
           <InfoBox>
             Each note includes the date, memory year, tags, emotion, photo path, GPS coordinates, location name, and your full text. Notes are formatted in Markdown and are fully readable and searchable inside Obsidian.{"\n\n"}
+            File names use the format <Text style={{ fontFamily: "Inter_600SemiBold" }}>YYYY-MM-DD[_tag][_year].md</Text> so they sort naturally in Obsidian's file tree.{"\n\n"}
             <Text style={{ fontFamily: "Inter_600SemiBold" }}>Import from Obsidian</Text> — if you have previously saved notes to Obsidian, you can reimport them. A file picker lets you select one or more .md files from your vault.{"\n"}
             • Android / Samsung: tap the <Text style={{ fontFamily: "Inter_600SemiBold" }}>☰ menu → Internal storage</Text>, then find <Text style={{ fontFamily: "Inter_600SemiBold" }}>Obsidian → [vault] → Memory Records</Text>.{"\n"}
             • iPhone: tap <Text style={{ fontFamily: "Inter_600SemiBold" }}>Browse → On My iPhone → Obsidian</Text> (or iCloud Drive → Obsidian).
@@ -491,7 +498,7 @@ export default function HelpScreen() {
 
         <View style={s.divider} />
 
-        <Text style={s.footerNote}>Memory Records v1.3{"\n"}Built with Expo · All data local · No tracking</Text>
+        <Text style={s.footerNote}>Memory Records v1.4{"\n"}Built with Expo · All data local · No tracking</Text>
       </ScrollView>
     </View>
   );
