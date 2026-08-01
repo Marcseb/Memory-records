@@ -253,15 +253,31 @@ export default function NewRecordScreen() {
         /* thumbnail optional — play-icon fallback shown */
       }
 
+      // DEBUG — remove after diagnosis
+      {
+        let permStatus = "n/a";
+        let assetRefDbg = "none";
+        try {
+          const ML = await import("expo-media-library");
+          const perm = await ML.requestPermissionsAsync(false);
+          permStatus = perm.status;
+          const base = (asset.fileName ?? "").replace(/\.[^.]+$/, "");
+          if (/^\d+$/.test(base)) assetRefDbg = base;
+          else if (asset.uri.startsWith("content://")) {
+            const tail = asset.uri.split("/").pop() ?? "";
+            if (/^\d+$/.test(tail)) assetRefDbg = tail;
+          }
+        } catch (e) { permStatus = `import failed: ${String(e)}`; }
+        Alert.alert(
+          "DEBUG",
+          `fileName: ${asset.fileName}\nuriTail: ${asset.uri.split("/").pop()}\nassetId: ${asset.assetId}\nassetRef: ${assetRefDbg}\npermStatus: ${permStatus}`
+        );
+      }
+
       // Try to get the actual recording date — two strategies in order of reliability
       let videoDate: string | undefined;
 
       // 1. MediaStore creationTime via expo-media-library (SDK-54-compatible, ~18.2.1).
-      //    Asset ID sources:
-      //    • assetId field  — populated on iOS, null on Android
-      //    • content:// URI tail — Android direct picker
-      //    • Pure-numeric filename stem — Expo Go on Android caches the video and names
-      //      it with the MediaStore ID (e.g. "1000048306.mp4")
       try {
         let assetRef: string | null = asset.assetId ?? null;
         if (!assetRef && asset.uri.startsWith("content://")) {
@@ -274,11 +290,10 @@ export default function NewRecordScreen() {
         }
         if (assetRef) {
           const MediaLibrary = await import("expo-media-library");
-          const { status } = await MediaLibrary.requestPermissionsAsync(/* writeOnly= */ false);
+          const { status } = await MediaLibrary.requestPermissionsAsync(false);
           if (status !== "granted") throw new Error("Permission denied");
           const info = await MediaLibrary.getAssetInfoAsync(assetRef);
           if (info.creationTime) {
-            // Normalise: SDK returns seconds on some platforms, ms on others
             const ms = info.creationTime > 1e11 ? info.creationTime : info.creationTime * 1000;
             const d = new Date(ms);
             if (d.getFullYear() >= 1990 && d.getFullYear() <= new Date().getFullYear() + 1) {
@@ -291,7 +306,6 @@ export default function NewRecordScreen() {
       }
 
       // 2. Parse date from filename (VID_20220315_143022.mp4 style).
-      //    Fallback for when MediaLibrary isn't available or assetRef can't be resolved.
       if (!videoDate) {
         videoDate = parseDateFromVideoFilename(asset.fileName, asset.uri);
       }
