@@ -3,16 +3,35 @@ import { useSettings } from "@/context/SettingsContext";
 import { MemoryRecord, useRecords } from "@/context/RecordsContext";
 
 /**
+ * Compute the stable base key for a record's filename.
+ * Includes the primary tag and context year when present.
+ *
+ * Examples:
+ *   date only          → "2026-08-01"
+ *   date + tag         → "2026-08-01_sports"
+ *   date + year        → "2026-08-01_1974"
+ *   date + tag + year  → "2026-08-01_nice_1974"
+ */
+function filenameKey(record: MemoryRecord): string {
+  const parts: string[] = [record.date];
+  const primaryTag = record.tags?.[0];
+  // Tags are already normalized to [a-z0-9-] by the app, but sanitize defensively.
+  if (primaryTag) parts.push(primaryTag.replace(/[^a-z0-9-]/gi, "_"));
+  if (record.contextYear !== undefined) parts.push(String(record.contextYear));
+  return parts.join("_");
+}
+
+/**
  * Build the Obsidian note filename (without .md extension).
  *
- * Format: YYYY-MM-DD
- * Same-date duplicates: YYYY-MM-DD_2, YYYY-MM-DD_3, …
- *
- * sameDateOrder is 1-based: 1 = first note on that date (no suffix).
+ * Format: YYYY-MM-DD[_tag][_year][_N]
+ * _N (≥ 2) is only appended when multiple records share the same
+ * (date, primaryTag, contextYear) combination.
  */
-function buildFilename(record: MemoryRecord, sameDateOrder: number): string {
-  if (sameDateOrder <= 1) return record.date;
-  return `${record.date}_${sameDateOrder}`;
+function buildFilename(record: MemoryRecord, sameKeyOrder: number): string {
+  const key = filenameKey(record);
+  if (sameKeyOrder <= 1) return key;
+  return `${key}_${sameKeyOrder}`;
 }
 
 function formatMarkdown(record: MemoryRecord, authorName?: string): string {
@@ -68,22 +87,25 @@ export type ObsidianBulkResult = {
 
 /**
  * Return the stable 1-based position of a record among all records that share
- * its date, sorted ascending by createdAt.
+ * the same filename key (date + primaryTag + contextYear), sorted by createdAt.
  *
  * This is used by saveToObsidian (single) and buildAllExportData (bulk)
  * so both paths always produce the same filename for the same record.
  *
- * Examples (three records on 2026-01-15, oldest first):
- *   oldest  → 2026-01-15        (order 1, no suffix)
- *   middle  → 2026-01-15_2
- *   newest  → 2026-01-15_3
+ * Examples — three records all tagged "nice", year 1974, on 2026-01-15:
+ *   oldest  → 2026-01-15_nice_1974     (order 1, no suffix)
+ *   middle  → 2026-01-15_nice_1974_2
+ *   newest  → 2026-01-15_nice_1974_3
+ *
+ * Records that differ in tag or year never collide and always get order 1.
  */
 export function sameDateOrder(record: MemoryRecord, allRecords: MemoryRecord[]): number {
+  const key = filenameKey(record);
   const siblings = allRecords
-    .filter((r) => r.date === record.date)
+    .filter((r) => filenameKey(r) === key)
     .sort((a, b) => a.createdAt - b.createdAt);
   const idx = siblings.findIndex((r) => r.id === record.id);
-  // If the record isn't found (e.g. not yet saved to state), treat it as last.
+  // If the record isn't in the list yet (e.g. not yet saved to state), treat as last.
   return idx === -1 ? siblings.length + 1 : idx + 1;
 }
 
@@ -101,10 +123,11 @@ export function buildAllExportData(
   authorName?: string
 ): Array<{ filename: string; content: string }> {
   const sorted = [...records].sort((a, b) => a.createdAt - b.createdAt);
-  const dateCounts = new Map<string, number>();
+  const keyCounts = new Map<string, number>();
   return sorted.map((record) => {
-    const order = (dateCounts.get(record.date) ?? 0) + 1;
-    dateCounts.set(record.date, order);
+    const key = filenameKey(record);
+    const order = (keyCounts.get(key) ?? 0) + 1;
+    keyCounts.set(key, order);
     const base = buildFilename(record, order);
     return {
       filename: `${base}.md`,
@@ -164,17 +187,18 @@ export function useObsidian() {
       return { exported: 0, failed: 0, total: 0 };
     }
 
-    // Sort by createdAt ascending so the per-date counter matches the stable
+    // Sort by createdAt ascending so the per-key counter matches the stable
     // order produced by sameDateOrder() in the single-record path.
     const sorted = [...records].sort((a, b) => a.createdAt - b.createdAt);
-    const dateCounts = new Map<string, number>();
+    const keyCounts = new Map<string, number>();
 
     let exported = 0;
     let failed = 0;
 
     for (const record of sorted) {
-      const order = (dateCounts.get(record.date) ?? 0) + 1;
-      dateCounts.set(record.date, order);
+      const key = filenameKey(record);
+      const order = (keyCounts.get(key) ?? 0) + 1;
+      keyCounts.set(key, order);
 
       const filename = buildFilename(record, order);
       const content = formatMarkdown(record, settings.authorName || undefined);
