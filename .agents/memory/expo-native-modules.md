@@ -65,4 +65,6 @@ The `assetId` field on an `ImagePickerAsset` is the correct input to pass.
 - `expo-video@~3.0.16` ✅ (SDK 54)
 - `expo-video-thumbnails@~10.0.8` ✅
 - `expo-sharing@~14.0.8` ✅
-- `expo-media-library` ✅ via dynamic import only (static import crashes)
+
+## Known broken in Expo Go SDK 54
+- `expo-media-library` ❌ — requires `ExpoMediaLibraryNext` native module which is NOT bundled in Expo Go SDK 54. Dynamic import does NOT help — Metro runs the module initializer synchronously, so the crash escapes try/catch. Do not install or import this package.
