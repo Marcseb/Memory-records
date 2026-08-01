@@ -273,8 +273,10 @@ export default function NewRecordScreen() {
           if (/^\d+$/.test(base)) assetRef = base;
         }
         if (assetRef) {
-          const { getAssetInfoAsync } = await import("expo-media-library");
-          const info = await getAssetInfoAsync(assetRef);
+          const MediaLibrary = await import("expo-media-library");
+          const { status } = await MediaLibrary.requestPermissionsAsync(/* writeOnly= */ false);
+          if (status !== "granted") throw new Error("Permission denied");
+          const info = await MediaLibrary.getAssetInfoAsync(assetRef);
           if (info.creationTime) {
             // Normalise: SDK returns seconds on some platforms, ms on others
             const ms = info.creationTime > 1e11 ? info.creationTime : info.creationTime * 1000;
@@ -284,9 +286,8 @@ export default function NewRecordScreen() {
             }
           }
         }
-      } catch (e: unknown) {
-        // DEBUG — remove after diagnosis
-        Alert.alert("MediaLib error", String(e instanceof Error ? e.message : e));
+      } catch {
+        /* silent — fall through to filename strategy */
       }
 
       // 2. Parse date from filename (VID_20220315_143022.mp4 style).
