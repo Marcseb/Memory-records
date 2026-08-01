@@ -253,6 +253,9 @@ export default function NewRecordScreen() {
         /* thumbnail optional — play-icon fallback shown */
       }
 
+      // DEBUG — remove after diagnosis
+      Alert.alert("Debug asset info", `assetId: ${asset.assetId ?? "null"}\nfileName: ${asset.fileName ?? "null"}\nuri: ${asset.uri}`);
+
       // Try to get the actual recording date — three strategies in order of reliability
       let videoDate: string | undefined;
 
