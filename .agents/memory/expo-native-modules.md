@@ -70,5 +70,7 @@ The `assetId` field on an `ImagePickerAsset` is the correct input to pass.
 - Install with `npx expo install expo-media-library` (NOT `pnpm add`) to get the correct peer-compatible version.
 - `pnpm add expo-media-library` installs `57.0.3` which uses `ExpoMediaLibraryNext` — NOT bundled in Expo Go SDK 54 → hard crash even with dynamic import.
 - Version `~18.2.1` uses `requireNativeModule('ExpoMediaLibrary')` which IS in Expo Go SDK 54.
-- Use dynamic import: `const { getAssetInfoAsync } = await import("expo-media-library")` inside try/catch.
+- Use dynamic import: `const ML = await import("expo-media-library")` inside try/catch.
+- **Always pass `granularPermissions: ["photo", "video"]`** to `requestPermissionsAsync` — Expo Go's AndroidManifest does not declare AUDIO, so the default call (which includes audio) throws: "You have requested the AUDIO permission, but it is not declared in AndroidManifest."
 - `creationTime` may be seconds or ms; normalise with: `info.creationTime > 1e11 ? info.creationTime : info.creationTime * 1000`.
+- On Android Expo Go, `asset.fileName` from ImagePicker is the MediaStore row ID (e.g. `1000048304.mp4`), not the original filename. Strip the extension and pass the numeric string to `getAssetInfoAsync`.
