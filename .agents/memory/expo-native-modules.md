@@ -38,6 +38,18 @@ This must be present whenever `react-native-reanimated` (v4+) is used. The plugi
 
 **Why:** In Reanimated 4, worklet transformation moved from `react-native-reanimated/plugin` (v3) to `react-native-worklets/plugin`. `babel-preset-expo` doesn't include either automatically.
 
+## Rule 7 — Android Expo Go ImagePicker caches videos with MediaStore ID as filename
+On Android, `ImagePicker.launchImageLibraryAsync` for videos returns:
+- `assetId`: **null** (not populated on Android)
+- `uri`: a `file://` path inside Expo Go's ImagePicker cache, NOT a `content://` URI
+- `fileName`: the MediaStore numeric ID + extension, e.g. `1000048306.mp4`
+
+To get `creationTime` from `expo-media-library` on Android: strip the extension from `fileName`, verify it's all digits, and pass that string to `getAssetInfoAsync(id)`.
+
+**Why:** Expo Go copies the picked video to its own cache before returning — the original content:// URI is not exposed. The cache filename is always `<mediaStoreId>.<ext>`.
+
+**How to apply:** Any code reading video metadata on Android must use the numeric filename stem as the asset reference, not the URI or assetId.
+
 ## Rule 6 — expo-media-library must be dynamically imported
 `expo-media-library` main entry calls `requireNativeModule('ExpoMediaLibrary')` — same hard-crash risk as `expo-file-system` main.
 Use `await import("expo-media-library")` inside a try/catch, never a static top-level import.

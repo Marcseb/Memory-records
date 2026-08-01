@@ -253,21 +253,28 @@ export default function NewRecordScreen() {
         /* thumbnail optional — play-icon fallback shown */
       }
 
-      // DEBUG — remove after diagnosis
-      Alert.alert("Debug asset info", `assetId: ${asset.assetId ?? "null"}\nfileName: ${asset.fileName ?? "null"}\nuri: ${asset.uri}`);
-
-      // Try to get the actual recording date — three strategies in order of reliability
+      // Try to get the actual recording date — strategies in order of reliability
       let videoDate: string | undefined;
 
-      // 1. Media library creationTime
-      //    - iOS: use assetId directly (e.g. "CC95F08C-88C3-4012-9D6D-64A413D254B3/L0/001")
-      //    - Android: assetId is null, but the numeric ID at the end of the content URI
-      //      (content://media/external/video/media/12345) is the MediaLibrary asset ID
+      // 1. Media library creationTime via asset reference.
+      //    Sources for the asset ID (in priority order):
+      //    a) assetId field — populated on iOS, null on Android
+      //    b) Numeric tail of a content:// URI  (content://media/external/video/media/12345)
+      //    c) Pure-numeric filename — Expo Go on Android caches the video and names it
+      //       with the MediaStore ID (e.g. "1000048306.mp4")
       try {
         let assetRef: string | null = asset.assetId ?? null;
-        if (!assetRef && asset.uri.startsWith("content://")) {
-          const tail = asset.uri.split("/").pop() ?? "";
-          if (/^\d+$/.test(tail)) assetRef = tail;
+        if (!assetRef) {
+          // Android content URI: content://media/external/video/media/12345
+          const uriTail = asset.uri.split("/").pop() ?? "";
+          if (asset.uri.startsWith("content://") && /^\d+$/.test(uriTail)) {
+            assetRef = uriTail;
+          }
+        }
+        if (!assetRef) {
+          // Expo Go cached copy named after MediaStore ID: "1000048306.mp4"
+          const base = (asset.fileName ?? "").replace(/\.[^.]+$/, "");
+          if (/^\d+$/.test(base)) assetRef = base;
         }
         if (assetRef) {
           const { getAssetInfoAsync } = await import("expo-media-library");
