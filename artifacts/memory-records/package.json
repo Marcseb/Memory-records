@@ -62,6 +62,8 @@
     "expo-secure-store": "^15.0.8",
     "expo-sharing": "^14.0.8",
     "expo-speech": "^14.0.8",
+    "expo-video": "~3.0.16",
+    "expo-video-thumbnails": "~10.0.8",
     "fflate": "^0.8.3"
   }
 }

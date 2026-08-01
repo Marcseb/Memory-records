@@ -2,6 +2,9 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system/legacy";
+import { VideoPlayerModal } from "@/components/VideoPlayerModal";
+import { PhotoViewerModal } from "@/components/PhotoViewerModal";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
@@ -37,6 +40,8 @@ export default function RecordDetailScreen() {
   const { isAiUnlocked } = useUnlock();
   const [showUnlockModal, setShowUnlockModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [videoModalUri, setVideoModalUri] = useState<string | null>(null);
+  const [photoModalUri, setPhotoModalUri] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [editedNote, setEditedNote] = useState("");
   const [editedYear, setEditedYear] = useState<number | undefined>(undefined);
@@ -303,6 +308,66 @@ export default function RecordDetailScreen() {
       borderBottomColor: colors.border,
     },
     addPhotoRowText: {
+      fontSize: 14,
+      fontFamily: "Inter_500Medium",
+      color: colors.primary,
+    },
+    videoSection: {
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    videoThumbnail: { width: "100%", height: 220 },
+    videoPlayOverlay: {
+      position: "absolute",
+      top: 0, left: 0, right: 0, bottom: 0,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    videoPlaceholder: {
+      width: "100%",
+      height: 120,
+      backgroundColor: colors.surface,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 8,
+    },
+    videoPlaceholderText: {
+      fontSize: 13,
+      fontFamily: "Inter_400Regular",
+      color: colors.mutedForeground,
+    },
+    videoActionRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      justifyContent: "flex-end",
+    },
+    videoActionBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      backgroundColor: "rgba(0,0,0,0.55)",
+      borderRadius: 14,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+    },
+    videoActionBtnText: {
+      fontSize: 12,
+      fontFamily: "Inter_500Medium",
+      color: "#fff",
+    },
+    addVideoRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    addVideoRowText: {
       fontSize: 14,
       fontFamily: "Inter_500Medium",
       color: colors.primary,
@@ -617,6 +682,42 @@ export default function RecordDetailScreen() {
     await updateRecord(record.id, { imageUri: result.assets[0].uri });
   };
 
+  const handlePickVideo = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert("Permission Required", "Allow access to your photo library to pick videos.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["videos"], quality: 1 });
+    if (result.canceled || !result.assets?.[0]) return;
+
+    const asset = result.assets[0];
+    try {
+      const ext = (asset.uri.split(".").pop() ?? "mp4").split("?")[0];
+      const destUri = `${FileSystem.documentDirectory ?? ""}video_${Date.now()}.${ext}`;
+      await FileSystem.copyAsync({ from: asset.uri, to: destUri });
+
+      let thumbnailUri: string | undefined;
+      try {
+        const { getThumbnailAsync } = await import("expo-video-thumbnails");
+        const thumb = await getThumbnailAsync(destUri, { time: 0, quality: 0.7 });
+        thumbnailUri = thumb.uri;
+      } catch { /* thumbnail optional */ }
+
+      if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await updateRecord(record.id, { videoUri: destUri, videoThumbnailUri: thumbnailUri });
+    } catch {
+      Alert.alert("Error", "Could not load video. Please try again.");
+    }
+  };
+
+  const handleRemoveVideo = () => {
+    Alert.alert("Remove video", "Remove the video from this record? The file will remain on your device.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Remove", style: "destructive", onPress: () => updateRecord(record.id, { videoUri: undefined, videoThumbnailUri: undefined }) },
+    ]);
+  };
+
   return (
     <View style={s.container}>
       <View style={s.header}>
@@ -654,9 +755,12 @@ export default function RecordDetailScreen() {
         keyboardShouldPersistTaps="handled"
         bottomOffset={24}
       >
+        {/* Photo */}
         {record.imageUri ? (
           <View>
-            <Image source={{ uri: record.imageUri }} style={s.photo} contentFit="cover" />
+            <Pressable onPress={() => setPhotoModalUri(record.imageUri!)}>
+              <Image source={{ uri: record.imageUri }} style={s.photo} contentFit="cover" />
+            </Pressable>
             {!isEditing && (
               <Pressable style={s.replacePhotoBtn} onPress={handleReplacePhoto}>
                 <Feather name="camera" size={13} color="#fff" />
@@ -668,6 +772,44 @@ export default function RecordDetailScreen() {
           <Pressable style={s.addPhotoRow} onPress={handleReplacePhoto}>
             <Feather name="camera" size={14} color={colors.primary} />
             <Text style={s.addPhotoRowText}>Add photo</Text>
+          </Pressable>
+        ) : null}
+
+        {/* Video */}
+        {record.videoUri ? (
+          <View style={s.videoSection}>
+            <Pressable onPress={() => setVideoModalUri(record.videoUri!)}>
+              {record.videoThumbnailUri ? (
+                <View>
+                  <Image source={{ uri: record.videoThumbnailUri }} style={s.videoThumbnail} contentFit="cover" />
+                  <View style={s.videoPlayOverlay}>
+                    <Feather name="play-circle" size={52} color="rgba(255,255,255,0.9)" />
+                  </View>
+                </View>
+              ) : (
+                <View style={s.videoPlaceholder}>
+                  <Feather name="video" size={36} color={colors.mutedForeground} />
+                  <Text style={s.videoPlaceholderText}>Tap to play</Text>
+                </View>
+              )}
+            </Pressable>
+            {!isEditing && (
+              <View style={s.videoActionRow}>
+                <Pressable style={s.videoActionBtn} onPress={handlePickVideo}>
+                  <Feather name="refresh-cw" size={12} color="#fff" />
+                  <Text style={s.videoActionBtnText}>Replace</Text>
+                </Pressable>
+                <Pressable style={[s.videoActionBtn, { backgroundColor: "rgba(200,50,50,0.65)" }]} onPress={handleRemoveVideo}>
+                  <Feather name="trash-2" size={12} color="#fff" />
+                  <Text style={s.videoActionBtnText}>Remove</Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
+        ) : !isEditing ? (
+          <Pressable style={s.addVideoRow} onPress={handlePickVideo}>
+            <Feather name="video" size={14} color={colors.primary} />
+            <Text style={s.addVideoRowText}>Add video</Text>
           </Pressable>
         ) : null}
 
@@ -988,6 +1130,8 @@ export default function RecordDetailScreen() {
         featureName="Historical Events"
         onClose={() => setShowUnlockModal(false)}
       />
+      <PhotoViewerModal uri={photoModalUri} onClose={() => setPhotoModalUri(null)} />
+      <VideoPlayerModal uri={videoModalUri} onClose={() => setVideoModalUri(null)} />
     </View>
   );
 }

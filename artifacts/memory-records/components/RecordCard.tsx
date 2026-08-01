@@ -107,6 +107,17 @@ export function RecordCard({
       borderRadius: 10,
       padding: 4,
     },
+    videoPlayBadge: {
+      position: "absolute",
+      bottom: 4,
+      left: 4,
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      backgroundColor: "rgba(0,0,0,0.60)",
+      alignItems: "center",
+      justifyContent: "center",
+    },
     noPhotoThumb: {
       width: 88,
       height: 88,
@@ -238,7 +249,20 @@ export function RecordCard({
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
       >
-        {record.imageUri ? (
+        {record.videoUri ? (
+          <View>
+            {record.videoThumbnailUri ? (
+              <Image source={{ uri: record.videoThumbnailUri }} style={s.thumbnail} contentFit="cover" />
+            ) : (
+              <View style={[s.thumbnail, { alignItems: "center", justifyContent: "center", backgroundColor: colors.surface }]}>
+                <Feather name="video" size={24} color={colors.mutedForeground} />
+              </View>
+            )}
+            <View style={s.videoPlayBadge}>
+              <Feather name="play" size={8} color="#fff" />
+            </View>
+          </View>
+        ) : record.imageUri ? (
           <View>
             <Image source={{ uri: record.imageUri }} style={s.thumbnail} contentFit="cover" />
             {onAddPhoto && (

@@ -4,6 +4,8 @@ import { readJsonFile, writeJsonFile, deleteJsonFile } from "@/utils/storage";
 export interface MemoryRecord {
   id: string;
   imageUri?: string;
+  videoUri?: string;
+  videoThumbnailUri?: string;
   tags?: string[];
   emotion?: string;
   note: string;

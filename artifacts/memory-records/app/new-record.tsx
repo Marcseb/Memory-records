@@ -1,6 +1,7 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
+import * as FileSystem from "expo-file-system/legacy";
 import { Image } from "expo-image";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, useLocalSearchParams } from "expo-router";
@@ -93,6 +94,8 @@ export default function NewRecordScreen() {
 
   const [mode, setMode] = useState<"photo" | "note" | null>(null);
   const [photo, setPhoto] = useState<PhotoData | null>(null);
+  const [video, setVideo] = useState<{ uri: string; thumbnailUri: string | null } | null>(null);
+  const [videoLoading, setVideoLoading] = useState(false);
   const [note, setNote] = useState("");
   const [manualDate, setManualDate] = useState(todayString());
   const [contextYear, setContextYear] = useState<number | undefined>(undefined);
@@ -185,8 +188,49 @@ export default function NewRecordScreen() {
 
   const handleNoteMode = () => {
     setPhoto(null);
+    setVideo(null);
     setManualDate(todayString());
     setMode("note");
+  };
+
+  const handleVideoPick = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert("Permission Required", "Allow access to your photo library to pick videos.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["videos"],
+      quality: 1,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+
+    setVideoLoading(true);
+    setMode("photo");
+    setPhoto(null);
+
+    try {
+      const asset = result.assets[0];
+      const ext = (asset.uri.split(".").pop() ?? "mp4").split("?")[0];
+      const destUri = `${FileSystem.documentDirectory ?? ""}video_${Date.now()}.${ext}`;
+      await FileSystem.copyAsync({ from: asset.uri, to: destUri });
+
+      let thumbnailUri: string | null = null;
+      try {
+        const { getThumbnailAsync } = await import("expo-video-thumbnails");
+        const thumb = await getThumbnailAsync(destUri, { time: 0, quality: 0.7 });
+        thumbnailUri = thumb.uri;
+      } catch {
+        /* thumbnail optional — play-icon fallback shown */
+      }
+
+      setVideo({ uri: destUri, thumbnailUri });
+    } catch {
+      Alert.alert("Error", "Could not load video. Please try again.");
+      setMode(null);
+    } finally {
+      setVideoLoading(false);
+    }
   };
 
   const handleSelectTag = (tag: string) => {
@@ -279,6 +323,8 @@ export default function NewRecordScreen() {
   const handleReset = () => {
     setMode(null);
     setPhoto(null);
+    setVideo(null);
+    setVideoLoading(false);
     setNote("");
     setManualDate(todayString());
     setContextYear(undefined);
@@ -302,6 +348,8 @@ export default function NewRecordScreen() {
     const record: MemoryRecord = {
       id: generateId(),
       imageUri: photo?.uri,
+      videoUri: video?.uri,
+      videoThumbnailUri: video?.thumbnailUri ?? undefined,
       tags: selectedTags.length > 0 ? selectedTags : undefined,
       emotion: selectedEmotion,
       note: note.trim(),
@@ -430,6 +478,12 @@ export default function NewRecordScreen() {
       fontSize: 14,
       fontFamily: "Inter_500Medium",
       color: colors.mutedForeground,
+    },
+    videoPlayOverlay: {
+      position: "absolute",
+      top: 0, left: 0, right: 0, bottom: 0,
+      alignItems: "center",
+      justifyContent: "center",
     },
     metaBox: {
       backgroundColor: colors.surface,
@@ -1119,10 +1173,15 @@ export default function NewRecordScreen() {
               <Text style={s.modeBtnText}>Photo</Text>
               <Text style={s.modeBtnSub}>Pick from gallery{"\n"}+ add a note</Text>
             </Pressable>
+            <Pressable style={s.modeBtn} onPress={handleVideoPick}>
+              <Feather name="video" size={32} color={colors.primary} />
+              <Text style={s.modeBtnText}>Video</Text>
+              <Text style={s.modeBtnSub}>Pick a clip{"\n"}+ add a note</Text>
+            </Pressable>
             <Pressable style={s.modeBtn} onPress={handleNoteMode}>
               <Feather name="file-text" size={32} color={colors.primary} />
               <Text style={s.modeBtnText}>Note</Text>
-              <Text style={s.modeBtnSub}>Text or voice{"\n"}without a photo</Text>
+              <Text style={s.modeBtnSub}>Text or voice{"\n"}without media</Text>
             </Pressable>
           </View>
         </View>
@@ -1133,16 +1192,39 @@ export default function NewRecordScreen() {
             paddingBottom: Platform.OS === "web" ? 100 : insets.bottom + 80,
           }}
         >
-          {/* Photo section — only in photo mode */}
+          {/* Photo / Video section — only in photo mode */}
           {mode === "photo" && (
             <View style={s.section}>
-              <Text style={s.sectionLabel}>Photo</Text>
+              <Text style={s.sectionLabel}>{video ? "Video" : "Photo"}</Text>
               {photo ? (
                 <View style={{ gap: 10 }}>
                   <Image source={{ uri: photo.uri }} style={s.photoPreview} contentFit="cover" />
                   <Pressable style={s.changePhotoBtn} onPress={handleGalleryPick}>
                     <Feather name="refresh-cw" size={16} color={colors.mutedForeground} />
                     <Text style={s.changeBtnText}>Change photo</Text>
+                  </Pressable>
+                </View>
+              ) : video ? (
+                <View style={{ gap: 10 }}>
+                  {videoLoading ? (
+                    <View style={[s.photoPreview, { alignItems: "center", justifyContent: "center", backgroundColor: colors.surface }]}>
+                      <ActivityIndicator color={colors.primary} />
+                    </View>
+                  ) : video.thumbnailUri ? (
+                    <View>
+                      <Image source={{ uri: video.thumbnailUri }} style={s.photoPreview} contentFit="cover" />
+                      <View style={s.videoPlayOverlay}>
+                        <Feather name="play-circle" size={48} color="rgba(255,255,255,0.9)" />
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={[s.photoPreview, { alignItems: "center", justifyContent: "center", backgroundColor: colors.surface }]}>
+                      <Feather name="video" size={40} color={colors.mutedForeground} />
+                    </View>
+                  )}
+                  <Pressable style={s.changePhotoBtn} onPress={handleVideoPick}>
+                    <Feather name="refresh-cw" size={16} color={colors.mutedForeground} />
+                    <Text style={s.changeBtnText}>Change video</Text>
                   </Pressable>
                 </View>
               ) : null}
