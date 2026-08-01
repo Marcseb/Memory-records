@@ -66,11 +66,19 @@ The `assetId` field on an `ImagePickerAsset` is the correct input to pass.
 - `expo-video-thumbnails@~10.0.8` ✅
 - `expo-sharing@~14.0.8` ✅
 
-## expo-media-library: must use SDK-54-compatible version ~18.2.1
-- Install with `npx expo install expo-media-library` (NOT `pnpm add`) to get the correct peer-compatible version.
-- `pnpm add expo-media-library` installs `57.0.3` which uses `ExpoMediaLibraryNext` — NOT bundled in Expo Go SDK 54 → hard crash even with dynamic import.
-- Version `~18.2.1` uses `requireNativeModule('ExpoMediaLibrary')` which IS in Expo Go SDK 54.
-- Use dynamic import: `const ML = await import("expo-media-library")` inside try/catch.
-- **Always pass `granularPermissions: ["photo", "video"]`** to `requestPermissionsAsync` — Expo Go's AndroidManifest does not declare AUDIO, so the default call (which includes audio) throws: "You have requested the AUDIO permission, but it is not declared in AndroidManifest."
-- `creationTime` may be seconds or ms; normalise with: `info.creationTime > 1e11 ? info.creationTime : info.creationTime * 1000`.
-- On Android Expo Go, `asset.fileName` from ImagePicker is the MediaStore row ID (e.g. `1000048304.mp4`), not the original filename. Strip the extension and pass the numeric string to `getAssetInfoAsync`.
+## expo-media-library in Expo Go (Android) — effectively unusable for reading video metadata
+
+Getting the recording date from a video selected via ImagePicker is **not reliably achievable in Expo Go on Android**. Every path has been exhausted:
+
+| Attempt | Result |
+|---|---|
+| `expo-media-library@57.0.3` (pnpm add) | Crashes at startup — `ExpoMediaLibraryNext` not in Expo Go SDK 54; Metro runs module init synchronously, escapes try/catch |
+| `expo-media-library@~18.2.1` (npx expo install) | Module loads (`ExpoMediaLibrary`), but `requestPermissionsAsync()` throws — AUDIO permission not declared in Expo Go AndroidManifest |
+| `requestPermissionsAsync(false, ["photo","video"])` | No crash, but `getAssetInfoAsync` silently fails (permission still denied or asset lookup returns nothing) |
+| Filename parsing (`VID-20200808-WA0003.mp4`) | Expo Go Android renames the cached file to the MediaStore row ID (`1000048304.mp4`), discarding the original name |
+
+**Root cause**: Expo Go's AndroidManifest is fixed — you cannot add permissions or config plugins to it. `expo-media-library` needs manifest entries we cannot provide.
+
+**The only real fix**: build a custom dev client with EAS (`eas build --profile development`) so you control the manifest. In Expo Go, fall back to manual date entry (current behaviour).
+
+**Current code state**: `handleVideoPick` attempts the MediaLibrary path silently; on failure it falls through to filename parsing, then to a manual date input UI. No crash, graceful degradation.
