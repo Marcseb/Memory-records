@@ -4,4 +4,4 @@
  */
 export const API_SERVER_URL =
   process.env["EXPO_PUBLIC_API_SERVER_URL"] ??
-  "https://memory-vault-manager.replit.app/api-server";
+  "https://memory-vault-manager.replit.app";
