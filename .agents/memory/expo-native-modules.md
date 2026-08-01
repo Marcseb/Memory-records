@@ -66,5 +66,9 @@ The `assetId` field on an `ImagePickerAsset` is the correct input to pass.
 - `expo-video-thumbnails@~10.0.8` ✅
 - `expo-sharing@~14.0.8` ✅
 
-## Known broken in Expo Go SDK 54
-- `expo-media-library` ❌ — requires `ExpoMediaLibraryNext` native module which is NOT bundled in Expo Go SDK 54. Dynamic import does NOT help — Metro runs the module initializer synchronously, so the crash escapes try/catch. Do not install or import this package.
+## expo-media-library: must use SDK-54-compatible version ~18.2.1
+- Install with `npx expo install expo-media-library` (NOT `pnpm add`) to get the correct peer-compatible version.
+- `pnpm add expo-media-library` installs `57.0.3` which uses `ExpoMediaLibraryNext` — NOT bundled in Expo Go SDK 54 → hard crash even with dynamic import.
+- Version `~18.2.1` uses `requireNativeModule('ExpoMediaLibrary')` which IS in Expo Go SDK 54.
+- Use dynamic import: `const { getAssetInfoAsync } = await import("expo-media-library")` inside try/catch.
+- `creationTime` may be seconds or ms; normalise with: `info.creationTime > 1e11 ? info.creationTime : info.creationTime * 1000`.

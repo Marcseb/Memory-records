@@ -253,14 +253,46 @@ export default function NewRecordScreen() {
         /* thumbnail optional — play-icon fallback shown */
       }
 
-      // Try to get the actual recording date from the filename.
-      // Works for camera-named files like VID_20220315_143022.mp4 or 20221015_080000.MOV.
-      // Videos with numeric-only names (WhatsApp, downloads, etc.) won't have a date — the
-      // user sees the manual date field instead.
-      // Note: expo-media-library cannot be used here — ExpoMediaLibraryNext is not bundled
-      // in Expo Go SDK 54, and Metro's dynamic import still runs the module initializer
-      // synchronously, causing an uncaught crash that escapes try/catch.
-      const videoDate = parseDateFromVideoFilename(asset.fileName, asset.uri);
+      // Try to get the actual recording date — two strategies in order of reliability
+      let videoDate: string | undefined;
+
+      // 1. MediaStore creationTime via expo-media-library (SDK-54-compatible, ~18.2.1).
+      //    Asset ID sources:
+      //    • assetId field  — populated on iOS, null on Android
+      //    • content:// URI tail — Android direct picker
+      //    • Pure-numeric filename stem — Expo Go on Android caches the video and names
+      //      it with the MediaStore ID (e.g. "1000048306.mp4")
+      try {
+        let assetRef: string | null = asset.assetId ?? null;
+        if (!assetRef && asset.uri.startsWith("content://")) {
+          const tail = asset.uri.split("/").pop() ?? "";
+          if (/^\d+$/.test(tail)) assetRef = tail;
+        }
+        if (!assetRef) {
+          const base = (asset.fileName ?? "").replace(/\.[^.]+$/, "");
+          if (/^\d+$/.test(base)) assetRef = base;
+        }
+        if (assetRef) {
+          const { getAssetInfoAsync } = await import("expo-media-library");
+          const info = await getAssetInfoAsync(assetRef);
+          if (info.creationTime) {
+            // Normalise: SDK returns seconds on some platforms, ms on others
+            const ms = info.creationTime > 1e11 ? info.creationTime : info.creationTime * 1000;
+            const d = new Date(ms);
+            if (d.getFullYear() >= 1990 && d.getFullYear() <= new Date().getFullYear() + 1) {
+              videoDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+            }
+          }
+        }
+      } catch {
+        /* silent — try next strategy */
+      }
+
+      // 2. Parse date from filename (VID_20220315_143022.mp4 style).
+      //    Fallback for when MediaLibrary isn't available or assetRef can't be resolved.
+      if (!videoDate) {
+        videoDate = parseDateFromVideoFilename(asset.fileName, asset.uri);
+      }
 
       setVideo({ uri: destUri, thumbnailUri, date: videoDate });
       if (videoDate) setManualDate(videoDate);
