@@ -38,8 +38,19 @@ This must be present whenever `react-native-reanimated` (v4+) is used. The plugi
 
 **Why:** In Reanimated 4, worklet transformation moved from `react-native-reanimated/plugin` (v3) to `react-native-worklets/plugin`. `babel-preset-expo` doesn't include either automatically.
 
+## Rule 6 — expo-media-library must be dynamically imported
+`expo-media-library` main entry calls `requireNativeModule('ExpoMediaLibrary')` — same hard-crash risk as `expo-file-system` main.
+Use `await import("expo-media-library")` inside a try/catch, never a static top-level import.
+`getAssetInfoAsync(assetId)` returns `creationTime` in **seconds** since epoch; multiply by 1000 for `new Date()`.
+The `assetId` field on an `ImagePickerAsset` is the correct input to pass.
+
+**Why:** Static import executes at module load time, crashing the process before any UI renders.
+
+**How to apply:** Any task that needs media library metadata should use dynamic import gated in try/catch, same pattern as `expo-video-thumbnails`.
+
 ## Known safe imports
 - `expo-file-system/legacy` ✅
 - `expo-video@~3.0.16` ✅ (SDK 54)
 - `expo-video-thumbnails@~10.0.8` ✅
 - `expo-sharing@~14.0.8` ✅
+- `expo-media-library` ✅ via dynamic import only (static import crashes)

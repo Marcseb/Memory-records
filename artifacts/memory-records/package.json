@@ -59,6 +59,7 @@
     "expo-clipboard": "^8.0.8",
     "expo-document-picker": "^14.0.8",
     "expo-file-system": "^19.0.23",
+    "expo-media-library": "^57.0.3",
     "expo-secure-store": "^15.0.8",
     "expo-sharing": "^14.0.8",
     "expo-speech": "^14.0.8",

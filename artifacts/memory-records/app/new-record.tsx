@@ -236,16 +236,20 @@ export default function NewRecordScreen() {
         /* thumbnail optional — play-icon fallback shown */
       }
 
-      // Try to read the file's modification time as the video date
+      // Try to get the actual recording date from the media library using the asset ID
       let videoDate: string | undefined;
       try {
-        const info = await FileSystem.getInfoAsync(asset.uri);
-        if (info.exists && (info as { modificationTime?: number }).modificationTime) {
-          const d = new Date(((info as { modificationTime?: number }).modificationTime ?? 0) * 1000);
-          videoDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        if (asset.assetId) {
+          const { getAssetInfoAsync } = await import("expo-media-library");
+          const info = await getAssetInfoAsync(asset.assetId);
+          if (info.creationTime) {
+            // creationTime is in seconds since epoch
+            const d = new Date(info.creationTime * 1000);
+            videoDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          }
         }
       } catch {
-        /* date optional */
+        /* date optional — falls back to manual entry */
       }
 
       setVideo({ uri: destUri, thumbnailUri, date: videoDate });
