@@ -384,6 +384,18 @@ export default function SettingsScreen() {
                     dialogTitle: "Save Obsidian export",
                     UTI: "public.zip-archive",
                   });
+                  // After the share sheet closes, guide the user through extraction.
+                  if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                  Alert.alert(
+                    "How to add notes to Obsidian",
+                    `1. Open the Files app and find the ZIP you just saved.\n\n` +
+                    `2. Tap the ZIP — iOS extracts it automatically into a "${folder}" folder.\n\n` +
+                    `3. Long-press that folder → Move.\n\n` +
+                    `4. Navigate to: On My iPhone → Obsidian → ${settings.vaultName}\n\n` +
+                    `5. Tap Move here.\n\n` +
+                    `Your ${files.length} note${files.length !== 1 ? "s" : ""} will appear in Obsidian immediately.`,
+                    [{ text: "Got it ✓" }]
+                  );
                 } else {
                   Alert.alert("Export ready", `ZIP saved to:\n${zipUri}`);
                 }
