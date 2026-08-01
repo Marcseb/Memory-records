@@ -778,21 +778,21 @@ export default function RecordDetailScreen() {
         {/* Video */}
         {record.videoUri ? (
           <View style={s.videoSection}>
-            <Pressable onPress={() => setVideoModalUri(record.videoUri!)}>
-              {record.videoThumbnailUri ? (
-                <View>
-                  <Image source={{ uri: record.videoThumbnailUri }} style={s.videoThumbnail} contentFit="cover" />
-                  <View style={s.videoPlayOverlay}>
-                    <Feather name="play-circle" size={52} color="rgba(255,255,255,0.9)" />
-                  </View>
+            {record.videoThumbnailUri ? (
+              <Pressable onPress={() => setVideoModalUri(record.videoUri!)}>
+                <Image source={{ uri: record.videoThumbnailUri }} style={s.videoThumbnail} contentFit="cover" />
+                <View style={s.videoPlayOverlay}>
+                  <Feather name="play-circle" size={52} color="rgba(255,255,255,0.9)" />
                 </View>
-              ) : (
-                <View style={s.videoPlaceholder}>
-                  <Feather name="video" size={36} color={colors.mutedForeground} />
-                  <Text style={s.videoPlaceholderText}>Tap to play</Text>
-                </View>
-              )}
-            </Pressable>
+              </Pressable>
+            ) : (
+              <Pressable style={s.videoPlaceholder} onPress={isEditing ? undefined : handlePickVideo}>
+                <Feather name="video" size={36} color={colors.primary} />
+                <Text style={[s.videoPlaceholderText, { color: colors.primary }]}>
+                  {isEditing ? "No thumbnail" : "Tap to replace video"}
+                </Text>
+              </Pressable>
+            )}
             {!isEditing && (
               <View style={s.videoActionRow}>
                 <Pressable style={s.videoActionBtn} onPress={handlePickVideo}>
