@@ -47,6 +47,23 @@ function todayString() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+/** Extract a YYYY-MM-DD date from a camera-style video filename.
+ *  Handles patterns like VID_20220315_143022.mp4 or 20221015_080000.MOV */
+function parseDateFromVideoFilename(fileName: string | null | undefined, uri?: string): string | undefined {
+  const name = fileName ?? uri?.split("/").pop() ?? "";
+  const match = name.match(/(\d{4})(\d{2})(\d{2})/);
+  if (!match) return undefined;
+  const [, year, month, day] = match;
+  const y = parseInt(year, 10);
+  const m = parseInt(month, 10);
+  const d = parseInt(day, 10);
+  const currentYear = new Date().getFullYear();
+  if (y < 1990 || y > currentYear + 1) return undefined;
+  if (m < 1 || m > 12) return undefined;
+  if (d < 1 || d > 31) return undefined;
+  return `${year}-${month}-${day}`;
+}
+
 function parseExifDate(exif: Record<string, unknown> | null | undefined): string | undefined {
   if (!exif) return undefined;
   const raw = exif["DateTimeOriginal"] ?? exif["DateTime"] ?? exif["DateTimeDigitized"];
@@ -236,20 +253,26 @@ export default function NewRecordScreen() {
         /* thumbnail optional — play-icon fallback shown */
       }
 
-      // Try to get the actual recording date from the media library using the asset ID
+      // Try to get the actual recording date — three strategies in order of reliability
       let videoDate: string | undefined;
+
+      // 1. Media library creationTime via assetId (iOS; assetId is null on Android)
       try {
         if (asset.assetId) {
           const { getAssetInfoAsync } = await import("expo-media-library");
           const info = await getAssetInfoAsync(asset.assetId);
           if (info.creationTime) {
-            // creationTime is in seconds since epoch
             const d = new Date(info.creationTime * 1000);
             videoDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
           }
         }
       } catch {
-        /* date optional — falls back to manual entry */
+        /* silent — try next strategy */
+      }
+
+      // 2. Parse date from filename (reliable on Android: VID_20220315_143022.mp4)
+      if (!videoDate) {
+        videoDate = parseDateFromVideoFilename(asset.fileName, asset.uri);
       }
 
       setVideo({ uri: destUri, thumbnailUri, date: videoDate });
