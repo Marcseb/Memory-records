@@ -683,6 +683,10 @@ export default function RecordDetailScreen() {
   };
 
   const handlePickVideo = async () => {
+    if (!isAiUnlocked) {
+      setShowUnlockModal(true);
+      return;
+    }
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       Alert.alert("Permission Required", "Allow access to your photo library to pick videos.");

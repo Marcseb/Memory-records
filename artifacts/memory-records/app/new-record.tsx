@@ -194,6 +194,11 @@ export default function NewRecordScreen() {
   };
 
   const handleVideoPick = async () => {
+    if (!isAiUnlocked) {
+      if (Platform.OS !== "web") Haptics.selectionAsync();
+      setShowUnlockModal(true);
+      return;
+    }
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       Alert.alert("Permission Required", "Allow access to your photo library to pick videos.");
@@ -448,6 +453,17 @@ export default function NewRecordScreen() {
       fontFamily: "Inter_400Regular",
       color: colors.mutedForeground,
       textAlign: "center",
+    },
+    modeBtnLockBadge: {
+      position: "absolute",
+      top: -4,
+      right: -6,
+      width: 16,
+      height: 16,
+      borderRadius: 8,
+      backgroundColor: colors.primary,
+      alignItems: "center",
+      justifyContent: "center",
     },
     section: { padding: 16, gap: 10 },
     sectionLabel: {
@@ -1174,8 +1190,15 @@ export default function NewRecordScreen() {
               <Text style={s.modeBtnSub}>Pick from gallery{"\n"}+ add a note</Text>
             </Pressable>
             <Pressable style={s.modeBtn} onPress={handleVideoPick}>
-              <Feather name="video" size={32} color={colors.primary} />
-              <Text style={s.modeBtnText}>Video</Text>
+              <View>
+                <Feather name="video" size={32} color={isAiUnlocked ? colors.primary : colors.mutedForeground} />
+                {!isAiUnlocked && (
+                  <View style={s.modeBtnLockBadge}>
+                    <Feather name="lock" size={9} color={colors.primaryForeground} />
+                  </View>
+                )}
+              </View>
+              <Text style={[s.modeBtnText, !isAiUnlocked && { color: colors.mutedForeground }]}>Video</Text>
               <Text style={s.modeBtnSub}>Pick a clip{"\n"}+ add a note</Text>
             </Pressable>
             <Pressable style={s.modeBtn} onPress={handleNoteMode}>
