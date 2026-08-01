@@ -284,8 +284,9 @@ export default function NewRecordScreen() {
             }
           }
         }
-      } catch {
-        /* silent — try next strategy */
+      } catch (e: unknown) {
+        // DEBUG — remove after diagnosis
+        Alert.alert("MediaLib error", String(e instanceof Error ? e.message : e));
       }
 
       // 2. Parse date from filename (VID_20220315_143022.mp4 style).
