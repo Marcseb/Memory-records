@@ -1,6 +1,7 @@
 import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
+import * as ImagePicker from "expo-image-picker";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useRef, useState } from "react";
 import {
@@ -306,6 +307,37 @@ export default function RecordDetailScreen() {
     deleteBtn: { padding: 4 },
     scroll: { flex: 1 },
     photo: { width: "100%", height: 280 },
+    replacePhotoBtn: {
+      position: "absolute",
+      bottom: 10,
+      right: 14,
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      backgroundColor: "rgba(0,0,0,0.55)",
+      borderRadius: 14,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+    },
+    replacePhotoBtnText: {
+      fontSize: 12,
+      fontFamily: "Inter_500Medium",
+      color: "#fff",
+    },
+    addPhotoRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    addPhotoRowText: {
+      fontSize: 14,
+      fontFamily: "Inter_500Medium",
+      color: colors.primary,
+    },
     content: { padding: 20, gap: 20 },
     metaCard: {
       backgroundColor: colors.card,
@@ -601,6 +633,21 @@ export default function RecordDetailScreen() {
 
   const editCount = record.editCount ?? 0;
 
+  const handleReplacePhoto = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert("Permission Required", "Allow access to your photo library to pick images.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      quality: 0.85,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+    if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    await updateRecord(record.id, { imageUri: result.assets[0].uri });
+  };
+
   return (
     <View style={s.container}>
       <View style={s.header}>
@@ -639,7 +686,20 @@ export default function RecordDetailScreen() {
         bottomOffset={24}
       >
         {record.imageUri ? (
-          <Image source={{ uri: record.imageUri }} style={s.photo} contentFit="cover" />
+          <View>
+            <Image source={{ uri: record.imageUri }} style={s.photo} contentFit="cover" />
+            {!isEditing && (
+              <Pressable style={s.replacePhotoBtn} onPress={handleReplacePhoto}>
+                <Feather name="camera" size={13} color="#fff" />
+                <Text style={s.replacePhotoBtnText}>Replace photo</Text>
+              </Pressable>
+            )}
+          </View>
+        ) : !isEditing ? (
+          <Pressable style={s.addPhotoRow} onPress={handleReplacePhoto}>
+            <Feather name="camera" size={14} color={colors.primary} />
+            <Text style={s.addPhotoRowText}>Add photo</Text>
+          </Pressable>
         ) : null}
 
         <View style={s.content}>
@@ -681,7 +741,7 @@ export default function RecordDetailScreen() {
                 <Text style={s.metaValue}>{record.contextYear}</Text>
               </View>
             )}
-            {record.tags && record.tags.length > 0 && (
+            {Array.isArray(record.tags) && record.tags.length > 0 && (
               <View style={s.metaRow}>
                 <Feather name="tag" size={14} color={colors.primary} />
                 <Text style={s.metaLabel}>Tags</Text>
@@ -698,14 +758,14 @@ export default function RecordDetailScreen() {
                 </View>
               );
             })()}
-            {record.location && (
+            {!!record.location && (
               <View style={s.metaRow}>
                 <Feather name="map-pin" size={14} color={colors.primary} />
                 <Text style={s.metaLabel}>Location</Text>
                 <Text style={s.metaValue}>{record.location}</Text>
               </View>
             )}
-            {record.lat && record.lng && (
+            {record.lat != null && record.lng != null && (
               <View style={s.metaRow}>
                 <Feather name="globe" size={14} color={colors.primary} />
                 <Text style={s.metaLabel}>GPS</Text>

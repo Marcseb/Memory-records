@@ -493,7 +493,7 @@ export default function HomeScreen() {
               record={record}
               onPress={() => router.push({ pathname: "/record/[id]", params: { id: record.id } })}
               onDelete={() => handleDelete(record)}
-              onAddPhoto={record.imageUri ? undefined : () => handleAddPhoto(record)}
+              onAddPhoto={() => handleAddPhoto(record)}
               yearRank={item.yearRank}
               yearTotal={item.yearTotal}
               onMoveUp={item.onMoveUp}

@@ -99,6 +99,14 @@ export function RecordCard({
       width: 88,
       height: 88,
     },
+    replaceThumbnailBtn: {
+      position: "absolute",
+      bottom: 4,
+      right: 4,
+      backgroundColor: "rgba(0,0,0,0.55)",
+      borderRadius: 10,
+      padding: 4,
+    },
     noPhotoThumb: {
       width: 88,
       height: 88,
@@ -231,7 +239,18 @@ export function RecordCard({
         onPressOut={handlePressOut}
       >
         {record.imageUri ? (
-          <Image source={{ uri: record.imageUri }} style={s.thumbnail} contentFit="cover" />
+          <View>
+            <Image source={{ uri: record.imageUri }} style={s.thumbnail} contentFit="cover" />
+            {onAddPhoto && (
+              <Pressable
+                style={s.replaceThumbnailBtn}
+                onPress={onAddPhoto}
+                hitSlop={6}
+              >
+                <Feather name="camera" size={11} color="#fff" />
+              </Pressable>
+            )}
+          </View>
         ) : (
           <Pressable style={s.noPhotoThumb} onPress={isHistorical ? undefined : onAddPhoto} hitSlop={4}>
             <Feather
