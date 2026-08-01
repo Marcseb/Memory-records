@@ -28,7 +28,8 @@ import { VoiceLanguage, VOICE_LANGUAGES, useSettings } from "@/context/SettingsC
 import { useUnlock } from "@/context/UnlockContext";
 import { UnlockModal } from "@/components/UnlockModal";
 import { useColors } from "@/hooks/useColors";
-import { useObsidian } from "@/hooks/useObsidian";
+import { zipSync } from "fflate";
+import { buildAllExportData } from "@/hooks/useObsidian";
 import { isObsidianMarkdown, parseMultipleObsidianNotes, parseObsidianNote } from "@/utils/obsidianParser";
 
 export default function SettingsScreen() {
@@ -45,8 +46,8 @@ export default function SettingsScreen() {
   const [importText, setImportText] = useState("");
   const [importing, setImporting] = useState(false);
 
-  const { exportAllToObsidian } = useObsidian();
   const [exportingToObsidian, setExportingToObsidian] = useState(false);
+  const [exportProgress, setExportProgress] = useState<{ current: number; total: number } | null>(null);
 
   const { isAiUnlocked, checkStatus, isChecking } = useUnlock();
   const [showUnlockModal, setShowUnlockModal] = useState(false);
@@ -296,32 +297,101 @@ export default function SettingsScreen() {
 
   const handleExportAllToObsidian = async () => {
     if (exportingToObsidian) return;
+    if (records.length === 0) {
+      Alert.alert("Nothing to export", "No records found.");
+      return;
+    }
+    const isAndroid = Platform.OS === "android";
     Alert.alert(
       `Export ${records.length} note${records.length !== 1 ? "s" : ""} to Obsidian`,
-      "Each note will be sent to Obsidian one by one. Obsidian will open and switch back repeatedly — this is normal. Re-exporting a note overwrites the existing file in your vault.",
+      isAndroid
+        ? "Pick your Obsidian vault folder. All notes will be written there directly — no app switching needed."
+        : "A ZIP of all notes will be created. Save it to Files, then extract it into your Obsidian vault.",
       [
         { text: "Cancel", style: "cancel" },
         {
           text: "Export all",
           onPress: async () => {
             setExportingToObsidian(true);
+            setExportProgress({ current: 0, total: records.length });
             if (Platform.OS !== "web") await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            const result = await exportAllToObsidian();
-            setExportingToObsidian(false);
-            if (result.total === 0) {
-              Alert.alert("Nothing to export", "No records found.");
-              return;
-            }
-            if (result.failed === 0) {
-              Alert.alert(
-                "Export complete ✓",
-                `${result.exported} note${result.exported !== 1 ? "s" : ""} sent to Obsidian.`
-              );
-            } else {
-              Alert.alert(
-                "Export finished",
-                `${result.exported} sent, ${result.failed} failed.\n\nMake sure Obsidian is installed with the Actions URI plugin enabled.`
-              );
+            try {
+              const files = buildAllExportData(records, settings.authorName || undefined);
+              const folder = settings.folder || "Memory Records";
+
+              if (isAndroid) {
+                // ── Android: write .md files directly into the vault folder via SAF ──
+                const perm = await StorageAccessFramework.requestDirectoryPermissionsAsync();
+                if (!perm.granted) {
+                  setExportingToObsidian(false);
+                  setExportProgress(null);
+                  return;
+                }
+                let written = 0;
+                let failed = 0;
+                for (let i = 0; i < files.length; i++) {
+                  setExportProgress({ current: i + 1, total: files.length });
+                  try {
+                    const uri = await StorageAccessFramework.createFileAsync(
+                      perm.directoryUri, files[i].filename, "text/markdown"
+                    );
+                    await StorageAccessFramework.writeAsStringAsync(uri, files[i].content);
+                    written++;
+                  } catch {
+                    failed++;
+                  }
+                }
+                setExportingToObsidian(false);
+                setExportProgress(null);
+                if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                Alert.alert(
+                  failed === 0 ? "Export complete ✓" : "Export finished",
+                  failed === 0
+                    ? `${written} note${written !== 1 ? "s" : ""} written to the selected folder.`
+                    : `${written} written, ${failed} failed.`
+                );
+              } else {
+                // ── iOS / web: build a ZIP and share it ──
+                setExportProgress({ current: files.length, total: files.length });
+                const zipEntries: Record<string, Uint8Array> = {};
+                const encoder = new TextEncoder();
+                for (const { filename, content } of files) {
+                  zipEntries[`${folder}/${filename}`] = encoder.encode(content);
+                }
+                const zipped = zipSync(zipEntries, { level: 1 }); // level 1 = fast
+
+                // Uint8Array → base64
+                let binary = "";
+                const chunkSize = 0x8000;
+                for (let i = 0; i < zipped.length; i += chunkSize) {
+                  binary += String.fromCharCode(...zipped.subarray(i, Math.min(i + chunkSize, zipped.length)));
+                }
+                const base64 = btoa(binary);
+
+                const stamp = new Date().toISOString().slice(0, 10);
+                const zipUri = (FileSystem.cacheDirectory ?? "") + `obsidian-export-${stamp}.zip`;
+                await FileSystem.writeAsStringAsync(zipUri, base64, {
+                  encoding: FileSystem.EncodingType.Base64,
+                });
+
+                setExportingToObsidian(false);
+                setExportProgress(null);
+
+                const canShare = await Sharing.isAvailableAsync();
+                if (canShare) {
+                  await Sharing.shareAsync(zipUri, {
+                    mimeType: "application/zip",
+                    dialogTitle: "Save Obsidian export",
+                    UTI: "public.zip-archive",
+                  });
+                } else {
+                  Alert.alert("Export ready", `ZIP saved to:\n${zipUri}`);
+                }
+              }
+            } catch (e) {
+              setExportingToObsidian(false);
+              setExportProgress(null);
+              Alert.alert("Export Error", String(e));
             }
           },
         },
@@ -880,7 +950,9 @@ export default function SettingsScreen() {
                 <Feather name="upload" size={15} color={colors.foreground} />
                 <Text style={[s.saveBtnText, { color: colors.foreground }]}>
                   {exportingToObsidian
-                    ? "Exporting…"
+                    ? exportProgress && exportProgress.current > 0
+                      ? `Writing ${exportProgress.current} / ${exportProgress.total}…`
+                      : "Preparing…"
                     : `Export all ${records.length} note${records.length !== 1 ? "s" : ""} to Obsidian`}
                 </Text>
               </Pressable>

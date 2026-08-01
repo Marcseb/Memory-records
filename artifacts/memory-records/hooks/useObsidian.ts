@@ -3,7 +3,7 @@ import { useSettings } from "@/context/SettingsContext";
 import { MemoryRecord, useRecords } from "@/context/RecordsContext";
 
 /**
- * Build the Obsidian note filename.
+ * Build the Obsidian note filename (without .md extension).
  *
  * Format: YYYY-MM-DD
  * Same-date duplicates: YYYY-MM-DD_2, YYYY-MM-DD_3, …
@@ -70,8 +70,8 @@ export type ObsidianBulkResult = {
  * Return the stable 1-based position of a record among all records that share
  * its date, sorted ascending by createdAt.
  *
- * This is used by both saveToObsidian (single) and exportAllToObsidian (bulk)
- * so the two paths always produce the same filename for the same record.
+ * This is used by saveToObsidian (single) and buildAllExportData (bulk)
+ * so both paths always produce the same filename for the same record.
  *
  * Examples (three records on 2026-01-15, oldest first):
  *   oldest  → 2026-01-15        (order 1, no suffix)
@@ -85,6 +85,32 @@ export function sameDateOrder(record: MemoryRecord, allRecords: MemoryRecord[]):
   const idx = siblings.findIndex((r) => r.id === record.id);
   // If the record isn't found (e.g. not yet saved to state), treat it as last.
   return idx === -1 ? siblings.length + 1 : idx + 1;
+}
+
+/**
+ * Build the full list of export files for all records.
+ * Returns an array sorted by createdAt (oldest first), each entry with:
+ *   - filename: "YYYY-MM-DD.md" (or "YYYY-MM-DD_2.md" for same-date duplicates)
+ *   - content:  formatted Markdown body
+ *
+ * This is a pure function — no side effects, no file I/O.
+ * The caller is responsible for writing or sharing the files.
+ */
+export function buildAllExportData(
+  records: MemoryRecord[],
+  authorName?: string
+): Array<{ filename: string; content: string }> {
+  const sorted = [...records].sort((a, b) => a.createdAt - b.createdAt);
+  const dateCounts = new Map<string, number>();
+  return sorted.map((record) => {
+    const order = (dateCounts.get(record.date) ?? 0) + 1;
+    dateCounts.set(record.date, order);
+    const base = buildFilename(record, order);
+    return {
+      filename: `${base}.md`,
+      content: formatMarkdown(record, authorName),
+    };
+  });
 }
 
 export function useObsidian() {
