@@ -1,0 +1,2 @@
+- [Expo Go native module rules](expo-native-modules.md) — which packages crash Expo Go at startup and how to avoid it when adding video or file features.
+- [Video feature rollback](video-feature-rollback.md) — what was tried, why it crashed, and the safe implementation plan for re-doing video picking.
