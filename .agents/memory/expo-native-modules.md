@@ -26,6 +26,18 @@ Expo Go bundles a specific version of every native module. The JS package versio
 ## Rule 4 — Task agents often import `expo-file-system` (main) instead of `/legacy`
 Any task related to file copying, video URIs, or document directory should be reviewed post-merge for this import.
 
+## Rule 5 — Reanimated 4 requires the worklets Babel plugin explicitly
+`babel-preset-expo` does NOT automatically include the worklets transform. Without it, every animated component throws `[Worklets] Failed to create a worklet` at runtime — no red overlay, just an uncaught error.
+
+Add to `babel.config.js`:
+```js
+plugins: ["react-native-worklets/plugin"]
+```
+
+This must be present whenever `react-native-reanimated` (v4+) is used. The plugin lives at `react-native-worklets/plugin/index.js`. Clearing Metro cache without this plugin in place will re-surface the crash on the next fresh bundle.
+
+**Why:** In Reanimated 4, worklet transformation moved from `react-native-reanimated/plugin` (v3) to `react-native-worklets/plugin`. `babel-preset-expo` doesn't include either automatically.
+
 ## Known safe imports
 - `expo-file-system/legacy` ✅
 - `expo-video@~3.0.16` ✅ (SDK 54)
