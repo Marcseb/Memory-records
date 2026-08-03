@@ -81,4 +81,6 @@ Getting the recording date from a video selected via ImagePicker is **not reliab
 
 **The only real fix**: build a custom dev client with EAS (`eas build --profile development`) so you control the manifest. In Expo Go, fall back to manual date entry (current behaviour).
 
-**Current code state**: `handleVideoPick` attempts the MediaLibrary path silently; on failure it falls through to filename parsing, then to a manual date input UI. No crash, graceful degradation.
+**Current code state**: `expo-media-library` has been fully removed from the project. `handleVideoPick` uses only filename parsing as a fallback, then manual date input. No crash, graceful degradation.
+
+**Why removed**: Even as a lazy dynamic import, the package adds a 4.27MB sub-bundle chunk to Metro's dependency graph (1763 modules vs ~1509 without it). This pushed the Android bundle load time from ~9.5s to ~15.5s, hitting Expo Go's loading timeout and causing "Something went wrong" at startup. Since the package cannot provide recording dates in Expo Go regardless, keeping it was all downside.

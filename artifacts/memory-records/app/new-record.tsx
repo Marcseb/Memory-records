@@ -253,50 +253,12 @@ export default function NewRecordScreen() {
         /* thumbnail optional — play-icon fallback shown */
       }
 
-      // Try to get the actual recording date — two strategies in order of reliability
-      let videoDate: string | undefined;
-
-      // 1. MediaStore creationTime via expo-media-library (SDK-54-compatible, ~18.2.1).
-      //    granularPermissions: omit 'audio' — it's not in Expo Go's AndroidManifest and
-      //    causes requestPermissionsAsync to throw before we can query anything.
-      try {
-        // Resolve the MediaStore asset ID:
-        //   • assetId    — populated on iOS, null on Android
-        //   • content:// URI tail — Android direct picker
-        //   • Pure-numeric filename stem — Expo Go on Android caches the video and renames
-        //     it with the MediaStore row ID (e.g. "1000048304.mp4")
-        let assetRef: string | null = asset.assetId ?? null;
-        if (!assetRef && asset.uri.startsWith("content://")) {
-          const tail = asset.uri.split("/").pop() ?? "";
-          if (/^\d+$/.test(tail)) assetRef = tail;
-        }
-        if (!assetRef) {
-          const base = (asset.fileName ?? "").replace(/\.[^.]+$/, "");
-          if (/^\d+$/.test(base)) assetRef = base;
-        }
-        if (assetRef) {
-          const MediaLibrary = await import("expo-media-library");
-          const { status } = await MediaLibrary.requestPermissionsAsync(false, ["photo", "video"]);
-          if (status !== "granted") throw new Error("Permission denied");
-          const info = await MediaLibrary.getAssetInfoAsync(assetRef);
-          if (info.creationTime) {
-            // Normalise: SDK returns seconds on some platforms, ms on others
-            const ms = info.creationTime > 1e11 ? info.creationTime : info.creationTime * 1000;
-            const d = new Date(ms);
-            if (d.getFullYear() >= 1990 && d.getFullYear() <= new Date().getFullYear() + 1) {
-              videoDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-            }
-          }
-        }
-      } catch {
-        /* silent — fall through to filename strategy */
-      }
-
-      // 2. Parse date from filename (VID_20220315_143022.mp4 style).
-      //    Fallback for when MediaLibrary isn't available or assetRef can't be resolved.
-      if (!videoDate) {
-        videoDate = parseDateFromVideoFilename(asset.fileName, asset.uri);
-      }
+      // Try to extract the recording date from the filename.
+      // Works for camera-named files like VID_20220315_143022.mp4 or 20221015_080000.MOV.
+      // On Android Expo Go, the cached file is renamed to its MediaStore ID (e.g. 1000048304.mp4)
+      // so date extraction from the name isn't possible there. The user sees the manual date
+      // input as a fallback. A custom dev build (EAS) would be required for MediaStore access.
+      const videoDate = parseDateFromVideoFilename(asset.fileName, asset.uri);
 
       setVideo({ uri: destUri, thumbnailUri, date: videoDate });
       if (videoDate) setManualDate(videoDate);
