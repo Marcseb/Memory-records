@@ -119,19 +119,18 @@ function parseGpsFromExif(
 ): { lat: number; lng: number } | undefined {
   if (!exif) return undefined;
 
-  // Log ALL exif keys and GPS-related values in development
+  // Temporary debug alert — shows raw GPS field values so we can diagnose the format
   if (__DEV__) {
-    console.log("[GPS EXIF keys]", Object.keys(exif));
-    console.log("[GPS EXIF GPS fields]", {
-      GPSLatitude: exif["GPSLatitude"],
-      GPSLatitudeRef: exif["GPSLatitudeRef"],
-      GPSLongitude: exif["GPSLongitude"],
-      GPSLongitudeRef: exif["GPSLongitudeRef"],
-      GPS: exif["GPS"],
-      "{GPS}": exif["{GPS}"],
-      Latitude: exif["Latitude"],
-      Longitude: exif["Longitude"],
-    });
+    const sub2 = exif["GPS"] ?? exif["{GPS}"];
+    Alert.alert(
+      "GPS EXIF debug",
+      `Keys: ${Object.keys(exif).filter(k => k.toLowerCase().includes("gps") || k === "Latitude" || k === "Longitude").join(", ") || "(none)"}\n\n` +
+      `GPSLatitude: ${JSON.stringify(exif["GPSLatitude"])}\n` +
+      `GPSLatitudeRef: ${JSON.stringify(exif["GPSLatitudeRef"])}\n` +
+      `GPSLongitude: ${JSON.stringify(exif["GPSLongitude"])}\n` +
+      `GPSLongitudeRef: ${JSON.stringify(exif["GPSLongitudeRef"])}\n` +
+      `GPS sub-obj: ${JSON.stringify(sub2) ?? "none"}`
+    );
   }
 
   // Some Android/Expo builds nest GPS under a sub-object keyed "GPS" or "{GPS}"
