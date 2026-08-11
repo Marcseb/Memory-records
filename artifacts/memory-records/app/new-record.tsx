@@ -71,6 +71,80 @@ function parseExifDate(exif: Record<string, unknown> | null | undefined): string
   return parts ?? undefined;
 }
 
+/**
+ * Convert a raw EXIF GPS field to decimal degrees.
+ *
+ * Expo ImagePicker on Android can return GPS in several shapes depending on
+ * the device and SDK version:
+ *   - Already a decimal number  (most common on iOS)
+ *   - A DMS array [degrees, minutes, seconds]
+ *   - A DMS rational string "37/1,22/1,499400/1000000"
+ *
+ * The sign (N/S for latitude, E/W for longitude) is always in the separate
+ * *Ref field — we must apply it or southern/western coordinates come out
+ * positive (or zero when parsing fails entirely).
+ */
+function dmsToDecimal(raw: unknown): number | undefined {
+  if (typeof raw === "number") return raw;
+
+  // Array form [deg, min, sec]
+  if (Array.isArray(raw) && raw.length === 3) {
+    const [d, m, s] = raw as number[];
+    if (typeof d === "number" && typeof m === "number" && typeof s === "number") {
+      return d + m / 60 + s / 3600;
+    }
+  }
+
+  // Rational string form "d/d2,m/m2,s/s2"
+  if (typeof raw === "string") {
+    const parts = raw.split(",");
+    if (parts.length === 3) {
+      const toFloat = (r: string) => {
+        const [num, den] = r.split("/").map(Number);
+        return den ? num / den : num;
+      };
+      const [d, m, s] = parts.map(toFloat);
+      if (!isNaN(d) && !isNaN(m) && !isNaN(s)) return d + m / 60 + s / 3600;
+    }
+    // Plain decimal string fallback
+    const n = parseFloat(raw);
+    if (!isNaN(n)) return n;
+  }
+
+  return undefined;
+}
+
+function parseGpsFromExif(
+  exif: Record<string, unknown> | null | undefined
+): { lat: number; lng: number } | undefined {
+  if (!exif) return undefined;
+
+  // Log raw GPS fields in development to help diagnose format differences
+  if (__DEV__) {
+    console.log("[GPS EXIF]", {
+      GPSLatitude: exif["GPSLatitude"],
+      GPSLatitudeRef: exif["GPSLatitudeRef"],
+      GPSLongitude: exif["GPSLongitude"],
+      GPSLongitudeRef: exif["GPSLongitudeRef"],
+    });
+  }
+
+  const rawLat = dmsToDecimal(exif["GPSLatitude"]);
+  const rawLng = dmsToDecimal(exif["GPSLongitude"]);
+  if (rawLat === undefined || rawLng === undefined) return undefined;
+
+  const latRef = typeof exif["GPSLatitudeRef"] === "string" ? exif["GPSLatitudeRef"] : "N";
+  const lngRef = typeof exif["GPSLongitudeRef"] === "string" ? exif["GPSLongitudeRef"] : "E";
+
+  const lat = latRef.toUpperCase().startsWith("S") ? -Math.abs(rawLat) : Math.abs(rawLat);
+  const lng = lngRef.toUpperCase().startsWith("W") ? -Math.abs(rawLng) : Math.abs(rawLng);
+
+  // Reject null-island (0, 0) — almost certainly a parse failure
+  if (lat === 0 && lng === 0) return undefined;
+
+  return { lat, lng };
+}
+
 function getNotePlaceholder(langCode: string): string {
   switch (langCode) {
     case "fr-FR": return "Tapez ou dictez votre note ici...";
@@ -196,9 +270,8 @@ export default function NewRecordScreen() {
     if (result.canceled || !result.assets?.[0]) return;
     const asset = result.assets[0];
     const exifDate = parseExifDate(asset.exif as Record<string, unknown> | null);
-    const lat = typeof asset.exif?.["GPSLatitude"] === "number" ? (asset.exif["GPSLatitude"] as number) : undefined;
-    const lng = typeof asset.exif?.["GPSLongitude"] === "number" ? (asset.exif["GPSLongitude"] as number) : undefined;
-    setPhoto({ uri: asset.uri, date: exifDate, hasMetadata: !!exifDate, lat, lng });
+    const gps = parseGpsFromExif(asset.exif as Record<string, unknown> | null);
+    setPhoto({ uri: asset.uri, date: exifDate, hasMetadata: !!exifDate, lat: gps?.lat, lng: gps?.lng });
     if (exifDate) setManualDate(exifDate);
     setMode("photo");
   };
