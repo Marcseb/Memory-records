@@ -19,6 +19,7 @@ import { RecordCard } from "@/components/RecordCard";
 import { EMOTIONS, getEmotion } from "@/constants/emotions";
 import { MemoryRecord, useRecords } from "@/context/RecordsContext";
 import { useColors } from "@/hooks/useColors";
+import { computeStreak } from "@/utils/streak";
 
 const UNTAGGED_KEY = "__untagged__";
 const SORT_KEY = "mr_sort_mode";
@@ -114,6 +115,8 @@ export default function HomeScreen() {
       return next;
     });
   };
+
+  const streak = useMemo(() => computeStreak(records), [records]);
 
   const groups = useMemo<[string, MemoryRecord[], string?][]>(() => {
     if (sortMode === "tag") {
@@ -235,7 +238,22 @@ export default function HomeScreen() {
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
     },
-    headerLeft: { gap: 2 },
+    headerLeft: { gap: 2, justifyContent: "center" },
+    streakBadge: {
+      alignSelf: "flex-start",
+      marginTop: 4,
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 10,
+      backgroundColor: colors.primary + "18",
+      borderWidth: 1,
+      borderColor: colors.primary + "40",
+    },
+    streakText: {
+      fontSize: 12,
+      fontFamily: "Inter_600SemiBold",
+      color: colors.primary,
+    },
     greeting: {
       fontSize: 13,
       fontFamily: "Inter_400Regular",
@@ -386,6 +404,11 @@ export default function HomeScreen() {
         <View style={s.headerLeft}>
           <Text style={s.greeting}>Memory Records</Text>
           <Text style={s.title}>Your Memories</Text>
+          {streak >= 2 && (
+            <View style={s.streakBadge}>
+              <Text style={s.streakText}>🔥 {streak} day{streak !== 1 ? "s" : ""}</Text>
+            </View>
+          )}
         </View>
         <View style={s.headerRight}>
           <Pressable style={s.helpBtn} onPress={handleHelp} accessibilityLabel="Help & Features Guide">
