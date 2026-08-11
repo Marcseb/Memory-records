@@ -119,18 +119,30 @@ function parseGpsFromExif(
 ): { lat: number; lng: number } | undefined {
   if (!exif) return undefined;
 
-  // Log raw GPS fields in development to help diagnose format differences
+  // Log ALL exif keys and GPS-related values in development
   if (__DEV__) {
-    console.log("[GPS EXIF]", {
+    console.log("[GPS EXIF keys]", Object.keys(exif));
+    console.log("[GPS EXIF GPS fields]", {
       GPSLatitude: exif["GPSLatitude"],
       GPSLatitudeRef: exif["GPSLatitudeRef"],
       GPSLongitude: exif["GPSLongitude"],
       GPSLongitudeRef: exif["GPSLongitudeRef"],
+      GPS: exif["GPS"],
+      "{GPS}": exif["{GPS}"],
+      Latitude: exif["Latitude"],
+      Longitude: exif["Longitude"],
     });
   }
 
-  const rawLat = dmsToDecimal(exif["GPSLatitude"]);
-  const rawLng = dmsToDecimal(exif["GPSLongitude"]);
+  // Some Android/Expo builds nest GPS under a sub-object keyed "GPS" or "{GPS}"
+  const sub = (exif["GPS"] ?? exif["{GPS}"]) as Record<string, unknown> | undefined;
+  if (sub && typeof sub === "object") {
+    const nested = parseGpsFromExif(sub);
+    if (nested) return nested;
+  }
+
+  const rawLat = dmsToDecimal(exif["GPSLatitude"] ?? exif["Latitude"]);
+  const rawLng = dmsToDecimal(exif["GPSLongitude"] ?? exif["Longitude"]);
   if (rawLat === undefined || rawLng === undefined) return undefined;
 
   const latRef = typeof exif["GPSLatitudeRef"] === "string" ? exif["GPSLatitudeRef"] : "N";
