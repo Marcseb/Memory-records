@@ -21,16 +21,49 @@ import * as FileSystem from "expo-file-system/legacy";
 export async function readGpsFromJpeg(
   uri: string
 ): Promise<{ lat: number; lng: number } | undefined> {
+  const b64 = await FileSystem.readAsStringAsync(uri, {
+    encoding: "base64" as const,
+  });
+  const buf = base64ToUint8Array(b64);
+  return extractJpegExifGps(buf);
+}
+
+/** Dev-only: returns a human-readable summary of what the parser sees in the file. */
+export async function debugGpsRead(uri: string): Promise<string> {
   try {
     const b64 = await FileSystem.readAsStringAsync(uri, {
       encoding: "base64" as const,
     });
     const buf = base64ToUint8Array(b64);
-    return extractJpegExifGps(buf);
+    const hex = Array.from(buf.slice(0, 12))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join(" ");
+    const isJpeg = buf[0] === 0xff && buf[1] === 0xd8;
+    // Scan for APP1 + Exif header
+    let foundExif = false;
+    let pos = 2;
+    while (pos + 3 < Math.min(buf.length, 65536)) {
+      if (buf[pos] !== 0xff) break;
+      const marker = buf[pos + 1];
+      pos += 2;
+      if (marker === 0xff) { pos--; continue; }
+      if (marker === 0xd8 || marker === 0xd9) continue;
+      if (marker === 0xda) break;
+      const segLen = (buf[pos] << 8) | buf[pos + 1];
+      if (marker === 0xe1 && segLen > 8) {
+        const h = pos + 2;
+        if (buf[h] === 0x45 && buf[h+1] === 0x78 && buf[h+2] === 0x69 &&
+            buf[h+3] === 0x66 && buf[h+4] === 0x00 && buf[h+5] === 0x00) {
+          foundExif = true;
+          break;
+        }
+      }
+      pos += segLen;
+    }
+    const gps = extractJpegExifGps(buf);
+    return `bytes(${buf.length}) hex:${hex} isJpeg:${isJpeg} hasExif:${foundExif} gps:${JSON.stringify(gps)}`;
   } catch (e) {
-    // Re-throw in dev so the caller can surface it; swallow in production.
-    if (__DEV__) throw e;
-    return undefined;
+    return `error: ${String(e)}`;
   }
 }
 

@@ -28,7 +28,7 @@ import { useInterview, ContextNote } from "@/hooks/useInterview";
 import { useColors } from "@/hooks/useColors";
 import { useUnlock } from "@/context/UnlockContext";
 import { UnlockModal } from "@/components/UnlockModal";
-import { readGpsFromJpeg } from "@/utils/exif-gps";
+import { readGpsFromJpeg, debugGpsRead } from "@/utils/exif-gps";
 
 interface PhotoData {
   uri: string;
@@ -264,7 +264,7 @@ export default function NewRecordScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images"],
       exif: true,
-      quality: 0.85,
+      quality: 1,
     });
     if (result.canceled || !result.assets?.[0]) return;
     const asset = result.assets[0];
@@ -273,24 +273,13 @@ export default function NewRecordScreen() {
     // Android where Expo returns GPSLatitude/GPSLongitude as 0.
     const expoGps = parseGpsFromExif(asset.exif as Record<string, unknown> | null);
     let fileGps: { lat: number; lng: number } | undefined;
-    let fileGpsError = "none";
     if (!expoGps) {
-      try {
-        fileGps = await readGpsFromJpeg(asset.uri);
-      } catch (e) {
-        fileGpsError = String(e);
-      }
+      try { fileGps = await readGpsFromJpeg(asset.uri); } catch { /* swallow */ }
     }
     const gps = expoGps ?? fileGps;
     if (__DEV__) {
-      Alert.alert(
-        "GPS debug",
-        `URI: ${asset.uri.slice(0, 40)}\n` +
-        `expoGps: ${JSON.stringify(expoGps)}\n` +
-        `fileGps: ${JSON.stringify(fileGps)}\n` +
-        `fileError: ${fileGpsError}\n` +
-        `final: ${JSON.stringify(gps)}`
-      );
+      const dbg = await debugGpsRead(asset.uri);
+      Alert.alert("GPS debug", `q=1 URI:${asset.uri.slice(0, 35)}\n${dbg}`);
     }
     setPhoto({ uri: asset.uri, date: exifDate, hasMetadata: !!exifDate, lat: gps?.lat, lng: gps?.lng });
     if (exifDate) setManualDate(exifDate);
