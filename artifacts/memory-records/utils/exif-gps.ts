@@ -80,13 +80,37 @@ export async function debugGpsRead(uri: string): Promise<string> {
 
     const gpsCnt = r16(gpsOff);
     const tags: string[] = [];
+    let latInfo = "?", lngInfo = "?";
     for (let i = 0; i < gpsCnt; i++) {
       const e = gpsOff + 2 + i * 12;
       const tag = r16(e), type = r16(e+2), count = r32(e+4);
-      tags.push(`t${tag.toString(16)}:ty${type}:c${count}`);
+      const rawVal = r32(e+8);
+      tags.push(`t${tag.toString(16)}:ty${type}:c${count}:v${rawVal}`);
+      // Decode RATIONAL DMS for lat (tag 2) and lng (tag 4)
+      if ((tag === 2 || tag === 4) && type === 5 && count === 3) {
+        const dataAbsOff = tiffStart + rawVal;
+        const inBuf = dataAbsOff + 24 <= buf.length;
+        if (inBuf) {
+          const readR = (o: number) => {
+            const n = little
+              ? (buf[o]|(buf[o+1]<<8)|(buf[o+2]<<16)|(buf[o+3]<<24))>>>0
+              : ((buf[o]<<24)|(buf[o+1]<<16)|(buf[o+2]<<8)|buf[o+3])>>>0;
+            const d = little
+              ? (buf[o+4]|(buf[o+5]<<8)|(buf[o+6]<<16)|(buf[o+7]<<24))>>>0
+              : ((buf[o+4]<<24)|(buf[o+5]<<16)|(buf[o+6]<<8)|buf[o+7])>>>0;
+            return d ? n/d : 0;
+          };
+          const deg = readR(dataAbsOff), min = readR(dataAbsOff+8), sec = readR(dataAbsOff+16);
+          const dec = deg + min/60 + sec/3600;
+          const info = `off=${rawVal} [${deg.toFixed(2)}°${min.toFixed(2)}'${sec.toFixed(4)}"]=>${dec.toFixed(6)}`;
+          if (tag === 2) latInfo = info; else lngInfo = info;
+        } else {
+          const info = `off=${rawVal} OUT_OF_BOUNDS(buf=${buf.length})`;
+          if (tag === 2) latInfo = info; else lngInfo = info;
+        }
+      }
     }
-    const gps = extractJpegExifGps(buf);
-    return `${orderStr} ifd0@${ifd0Off}(${ifd0Count}) gpsIFD@${gpsOff}(${gpsCnt}) tags:[${tags.join(",")}] gps:${JSON.stringify(gps)}`;
+    return `${orderStr} ifd0@${ifd0Off}(${ifd0Count}) gps@${gpsOff}(${gpsCnt})\nlat:${latInfo}\nlng:${lngInfo}`;
   } catch (e) {
     return `error:${String(e)}`;
   }
