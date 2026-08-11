@@ -1,8 +1,7 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
-import * as FileSystem from "expo-file-system/legacy";
-import { deleteAppVideo } from "@/utils/storage";
+import { copyVideoToAppStorage, deleteAppVideo } from "@/utils/storage";
 import { Image } from "expo-image";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, useLocalSearchParams } from "expo-router";
@@ -241,8 +240,9 @@ export default function NewRecordScreen() {
     try {
       const asset = result.assets[0];
       const ext = (asset.uri.split(".").pop() ?? "mp4").split("?")[0];
-      const destUri = `${FileSystem.documentDirectory ?? ""}video_${Date.now()}.${ext}`;
-      await FileSystem.copyAsync({ from: asset.uri, to: destUri });
+      // Copy into documentDirectory/videos/ — that folder is included in
+      // iCloud backups by default, keeping videos safe through backup/restore.
+      const destUri = await copyVideoToAppStorage(asset.uri, ext);
 
       let thumbnailUri: string | null = null;
       try {
