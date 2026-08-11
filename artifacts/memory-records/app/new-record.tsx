@@ -28,6 +28,7 @@ import { useInterview, ContextNote } from "@/hooks/useInterview";
 import { useColors } from "@/hooks/useColors";
 import { useUnlock } from "@/context/UnlockContext";
 import { UnlockModal } from "@/components/UnlockModal";
+import { readGpsFromJpeg } from "@/utils/exif-gps";
 
 interface PhotoData {
   uri: string;
@@ -119,19 +120,6 @@ function parseGpsFromExif(
 ): { lat: number; lng: number } | undefined {
   if (!exif) return undefined;
 
-  // Temporary debug alert — shows raw GPS field values so we can diagnose the format
-  if (__DEV__) {
-    const sub2 = exif["GPS"] ?? exif["{GPS}"];
-    Alert.alert(
-      "GPS EXIF debug",
-      `Keys: ${Object.keys(exif).filter(k => k.toLowerCase().includes("gps") || k === "Latitude" || k === "Longitude").join(", ") || "(none)"}\n\n` +
-      `GPSLatitude: ${JSON.stringify(exif["GPSLatitude"])}\n` +
-      `GPSLatitudeRef: ${JSON.stringify(exif["GPSLatitudeRef"])}\n` +
-      `GPSLongitude: ${JSON.stringify(exif["GPSLongitude"])}\n` +
-      `GPSLongitudeRef: ${JSON.stringify(exif["GPSLongitudeRef"])}\n` +
-      `GPS sub-obj: ${JSON.stringify(sub2) ?? "none"}`
-    );
-  }
 
   // Some Android/Expo builds nest GPS under a sub-object keyed "GPS" or "{GPS}"
   const sub = (exif["GPS"] ?? exif["{GPS}"]) as Record<string, unknown> | undefined;
@@ -281,7 +269,11 @@ export default function NewRecordScreen() {
     if (result.canceled || !result.assets?.[0]) return;
     const asset = result.assets[0];
     const exifDate = parseExifDate(asset.exif as Record<string, unknown> | null);
-    const gps = parseGpsFromExif(asset.exif as Record<string, unknown> | null);
+    // Try Expo's parsed EXIF first; fall back to our own JPEG byte parser for
+    // Android where Expo returns GPSLatitude/GPSLongitude as 0.
+    const gps =
+      parseGpsFromExif(asset.exif as Record<string, unknown> | null) ??
+      (await readGpsFromJpeg(asset.uri));
     setPhoto({ uri: asset.uri, date: exifDate, hasMetadata: !!exifDate, lat: gps?.lat, lng: gps?.lng });
     if (exifDate) setManualDate(exifDate);
     setMode("photo");
