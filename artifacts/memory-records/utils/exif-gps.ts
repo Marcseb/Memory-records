@@ -22,12 +22,17 @@ export async function readGpsFromJpeg(
   uri: string
 ): Promise<{ lat: number; lng: number } | undefined> {
   try {
+    // Read only the first 64 KB — the EXIF APP1 segment always appears
+    // near the start of a JPEG and is at most 65535 bytes.
     const b64 = await FileSystem.readAsStringAsync(uri, {
       encoding: "base64" as const,
+      position: 0,
+      length: 65536,
     });
     const buf = base64ToUint8Array(b64);
     return extractJpegExifGps(buf);
-  } catch {
+  } catch (e) {
+    if (__DEV__) console.warn("[readGpsFromJpeg] error:", e);
     return undefined;
   }
 }

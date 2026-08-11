@@ -271,9 +271,18 @@ export default function NewRecordScreen() {
     const exifDate = parseExifDate(asset.exif as Record<string, unknown> | null);
     // Try Expo's parsed EXIF first; fall back to our own JPEG byte parser for
     // Android where Expo returns GPSLatitude/GPSLongitude as 0.
-    const gps =
-      parseGpsFromExif(asset.exif as Record<string, unknown> | null) ??
-      (await readGpsFromJpeg(asset.uri));
+    const expoGps = parseGpsFromExif(asset.exif as Record<string, unknown> | null);
+    const fileGps = expoGps ? undefined : await readGpsFromJpeg(asset.uri);
+    const gps = expoGps ?? fileGps;
+    if (__DEV__) {
+      Alert.alert(
+        "GPS debug",
+        `URI scheme: ${asset.uri.slice(0, 20)}\n` +
+        `expoGps: ${JSON.stringify(expoGps)}\n` +
+        `fileGps: ${JSON.stringify(fileGps)}\n` +
+        `final: ${JSON.stringify(gps)}`
+      );
+    }
     setPhoto({ uri: asset.uri, date: exifDate, hasMetadata: !!exifDate, lat: gps?.lat, lng: gps?.lng });
     if (exifDate) setManualDate(exifDate);
     setMode("photo");
