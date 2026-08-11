@@ -28,42 +28,67 @@ export async function readGpsFromJpeg(
   return extractJpegExifGps(buf);
 }
 
-/** Dev-only: returns a human-readable summary of what the parser sees in the file. */
+/** Dev-only: walks the TIFF/GPS IFD structure and reports where the parser stops. */
 export async function debugGpsRead(uri: string): Promise<string> {
   try {
-    const b64 = await FileSystem.readAsStringAsync(uri, {
-      encoding: "base64" as const,
-    });
+    const b64 = await FileSystem.readAsStringAsync(uri, { encoding: "base64" as const });
     const buf = base64ToUint8Array(b64);
-    const hex = Array.from(buf.slice(0, 12))
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join(" ");
-    const isJpeg = buf[0] === 0xff && buf[1] === 0xd8;
-    // Scan for APP1 + Exif header
-    let foundExif = false;
+
+    if (buf[0] !== 0xff || buf[1] !== 0xd8) return "not a JPEG";
+
+    // Find APP1 with Exif header
+    let tiffStart = -1;
     let pos = 2;
-    while (pos + 3 < Math.min(buf.length, 65536)) {
-      if (buf[pos] !== 0xff) break;
-      const marker = buf[pos + 1];
-      pos += 2;
+    while (pos + 3 < buf.length) {
+      if (buf[pos] !== 0xff) return `lost sync at ${pos}`;
+      const marker = buf[pos + 1]; pos += 2;
       if (marker === 0xff) { pos--; continue; }
       if (marker === 0xd8 || marker === 0xd9) continue;
       if (marker === 0xda) break;
       const segLen = (buf[pos] << 8) | buf[pos + 1];
       if (marker === 0xe1 && segLen > 8) {
         const h = pos + 2;
-        if (buf[h] === 0x45 && buf[h+1] === 0x78 && buf[h+2] === 0x69 &&
-            buf[h+3] === 0x66 && buf[h+4] === 0x00 && buf[h+5] === 0x00) {
-          foundExif = true;
-          break;
+        if (buf[h]===0x45&&buf[h+1]===0x78&&buf[h+2]===0x69&&buf[h+3]===0x66&&buf[h+4]===0x00&&buf[h+5]===0x00) {
+          tiffStart = h + 6; break;
         }
       }
       pos += segLen;
     }
+    if (tiffStart < 0) return "no Exif APP1";
+
+    const little = buf[tiffStart] === 0x49 && buf[tiffStart + 1] === 0x49;
+    const orderStr = little ? "LE" : "BE";
+    const r16 = (o: number) => little
+      ? buf[tiffStart+o] | (buf[tiffStart+o+1] << 8)
+      : (buf[tiffStart+o] << 8) | buf[tiffStart+o+1];
+    const r32 = (o: number) => {
+      const a=buf[tiffStart+o],b=buf[tiffStart+o+1],c=buf[tiffStart+o+2],d=buf[tiffStart+o+3];
+      return (little ? (a|(b<<8)|(c<<16)|(d<<24)) : ((a<<24)|(b<<16)|(c<<8)|d)) >>> 0;
+    };
+
+    const magic = r16(2);
+    if (magic !== 42) return `${orderStr} bad magic ${magic}`;
+
+    const ifd0Off = r32(4);
+    const ifd0Count = r16(ifd0Off);
+    let gpsOff: number | undefined;
+    for (let i = 0; i < ifd0Count; i++) {
+      const e = ifd0Off + 2 + i * 12;
+      if (r16(e) === 0x8825) { gpsOff = r32(e + 8); break; }
+    }
+    if (gpsOff === undefined) return `${orderStr} magic=${magic} ifd0@${ifd0Off} cnt=${ifd0Count} NO GPS IFD pointer`;
+
+    const gpsCnt = r16(gpsOff);
+    const tags: string[] = [];
+    for (let i = 0; i < gpsCnt; i++) {
+      const e = gpsOff + 2 + i * 12;
+      const tag = r16(e), type = r16(e+2), count = r32(e+4);
+      tags.push(`t${tag.toString(16)}:ty${type}:c${count}`);
+    }
     const gps = extractJpegExifGps(buf);
-    return `bytes(${buf.length}) hex:${hex} isJpeg:${isJpeg} hasExif:${foundExif} gps:${JSON.stringify(gps)}`;
+    return `${orderStr} ifd0@${ifd0Off}(${ifd0Count}) gpsIFD@${gpsOff}(${gpsCnt}) tags:[${tags.join(",")}] gps:${JSON.stringify(gps)}`;
   } catch (e) {
-    return `error: ${String(e)}`;
+    return `error:${String(e)}`;
   }
 }
 
