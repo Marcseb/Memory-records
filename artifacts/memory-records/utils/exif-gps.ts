@@ -10,7 +10,7 @@
  * No native modules — works in Expo Go.
  */
 
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
