@@ -1,6 +1,6 @@
 # Memory Records
 
-Journal your memories with photos, voice, and text — then archive them to your Obsidian vault. No cloud, no account, no data ever leaves your phone.
+Journal your memories with photos, voice memos, and text — then archive them to your Obsidian vault. No cloud account, no tracking, and no data leaves your phone unless you explicitly use an AI feature, export, or share it.
 
 ---
 
@@ -34,9 +34,9 @@ The app loads in a few seconds. You can save it to your Expo Go home screen for 
 
 ### Step 2 — Create your account
 
-Memory Records uses local authentication — your credentials are stored on your device only, never on a server.
+Memory Records uses a local profile — your credentials are stored on your device only, never on a server.
 
-1. On the Register screen, pick a username and password.
+1. On the Register screen, pick a username and password for your local profile.
 2. Tap **Create account**. That's it — you're in.
 
 > Your login is tied to this device. If you reinstall the app, you will need to register again and restore from a JSON backup.
@@ -47,10 +47,11 @@ Memory Records uses local authentication — your credentials are stored on your
 
 Open the **Home** tab and tap **+**:
 
-1. Pick a photo from your gallery — the app reads its EXIF data automatically (date, GPS, location name).
+1. Pick a photo from your gallery — the app reads available EXIF data such as the date and, when exposed by the device, GPS coordinates.
 2. Add a text note, or tap the microphone to dictate hands-free.
-3. Add tags to organise the memory, select an emotion tag, and optionally enter the Memory Year (the year the memory is from, if different from today).
-4. Tap **Save**.
+3. Optionally record a voice memo in the **Voice Memo** section below the note.
+4. Add tags to organise the memory, select an emotion tag, and optionally enter the Memory Year (the year the memory is from, if different from today).
+5. Tap **Save**.
 
 Your memory is stored locally, instantly, with no upload.
 
@@ -58,12 +59,13 @@ Your memory is stored locally, instantly, with no upload.
 
 ## Capturing memories
 
-- **Photo from gallery** — EXIF metadata (date, GPS, location) is extracted automatically; no manual entry needed. Tap the photo on the detail screen to view it full-screen. A camera overlay on any card lets you replace the photo at any time.
+- **Photo from gallery** — available EXIF metadata is extracted automatically, including the date and GPS coordinates when the device exposes them. If a date is unavailable, enter it manually. Tap the photo on the detail screen to view it full-screen. A camera overlay on any card lets you replace the photo at any time.
 - **Video clip** *(Pro)* — pick a short video from your gallery. The first frame is extracted as a thumbnail and shown on the card. Tap the thumbnail on the detail screen to play the video full-screen. Requires the AI feature pack to be unlocked.
 - **Clipboard paste** — paste a screenshot or image copied from another app. If no EXIF date is found, the app prompts you to enter one.
 - **Text-only note** — write a note without any photo; useful for thoughts or conversations.
 - **Voice-to-text** — dictate your note hands-free. Speech recognition runs on-device in French, Italian, or English.
-- **Tags** — add one or more tags per memory to organise by theme, person, or place. Tags are manageable in Settings.
+- **Voice memos** — record an audio clip below the note, then play, pause, seek, replace, or delete it from the record. Voice memos are stored locally in the app. Records with audio show a speaker icon and receive the searchable `#voice-memo` tag automatically.
+- **Tags** — add one or more tags per memory to organise by theme, person, or place. The new-record picker uses a compact horizontal chip row. Settings provides a collapsible tag section with compact chips and a control for creating new tags.
 - **Emotion tags** — attach one of 22 colour-coded emotions (joy, nostalgia, gratitude, grief, etc.) to each memory. Used for grouping and filtering in the home list.
 - **Memory Year** — optionally record the year the memory is from (e.g. 1998), independently of today's date. Used for chronological sorting.
 
@@ -75,12 +77,16 @@ The home list offers four sort modes, toggled with the pill bar at the top:
 
 | Mode | Description |
 |---|---|
-| **Tag** | Grouped by primary tag (folder-style) |
+| **Folder** | Grouped by primary tag |
 | **Emotion** | Grouped by emotion, alphabetically |
 | **Added** | Flat list, newest-added first |
 | **Date** | Flat list, most recent Memory Year first. Manual reordering within each year is supported. |
 
 Groups (Tag and Emotion modes) can be collapsed individually by tapping their header.
+
+### Search
+
+Use the search field at the top of the Home tab to filter memories by note text, tag, emotion, or location. Search results expand grouped sections automatically and show the matching count. Searching for `voice-memo` finds every record with a voice memo.
 
 ### Year rank reordering (Date mode)
 
@@ -95,7 +101,7 @@ The first time any note in a year is moved, all notes in that year are automatic
 
 ## Unlocking AI Features
 
-The **AI Interviewer**, **Historical Events** generator, and **Video Attachments** are grouped into a single AI feature pack, unlocked by a one-time **€5 contribution via PayPal**. All other features (capturing memories, sorting, tags, emotions, year ranks, Obsidian export/import, JSON backup) remain fully free and require no payment.
+The **AI Interviewer**, **Historical Events** generator, and **Video Attachments** are grouped into a single AI feature pack, unlocked by a one-time **€5 contribution via PayPal**. All other features (capturing memories, voice memos, sorting, search, tags, emotions, year ranks, Obsidian export/import, JSON backup) remain fully free and require no payment.
 
 ### How to unlock
 
@@ -103,7 +109,7 @@ The **AI Interviewer**, **Historical Events** generator, and **Video Attachments
 2. The **Unlock AI Features** sheet appears. It shows your **device ID** — a unique token tied to this installation.
 3. Tap **Contribute €5 via PayPal**. A pre-filled PayPal form opens in your browser.  
    — In the PayPal message / "special instructions" field, include your device ID so the payment can be matched automatically.
-4. After payment, tap **I've paid — check payment status**. The app polls the server; if your payment has been processed, both features unlock immediately.
+4. After payment, tap **I've paid — check payment status**. The app polls the server; if your payment has been processed, the AI Interviewer, Historical Events, and Video Attachments unlock immediately.
 5. **Activation code (alternative):** If you prefer, send your device ID to the developer. Once your payment is confirmed, you'll receive a one-time code in the format `MR-XXXXXXXX`. Tap **I have an activation code**, enter it, and tap **Activate**.
 
 The unlock is stored on the server and cached on-device for 12 hours. If you reinstall the app, re-enter your activation code or tap **Check payment status** to restore access.
@@ -173,7 +179,7 @@ Memory Records can save notes directly into your **Obsidian vault** as Markdown 
 
 > Both Obsidian and Memory Records must be installed on the same device. The app opens Obsidian via a deep link — no Wi-Fi or server needed.
 
-Each saved note includes the date, memory year, year rank, tags, emotion, event type (for historical notes), photo path, GPS coordinates, location name, and your full text, formatted in Markdown and fully searchable inside Obsidian.
+Each saved note includes the date, memory year, year rank, tags, emotion, event type (for historical notes), available photo path, GPS coordinates when present, location name, and your full text, formatted in Markdown and fully searchable inside Obsidian. Voice memo files remain in the app's local storage and are not embedded in the Markdown export.
 
 ### Bulk export
 
@@ -188,7 +194,7 @@ File names follow the format `YYYY-MM-DD[_tag][_year][_N].md` — the primary ta
 
 ## Backup & restore
 
-- **JSON export** — tap Export in Settings. On **Android** a folder picker opens so you can save directly to Documents, Downloads, an SD card folder, or Google Drive. On **iOS** the share sheet appears with a "Save to Files" option. The file is named `memory-records-backup-YYYY-MM-DD.json` and contains all records and tags in a readable, pretty-printed format. Photo references are stored as local file paths (not embedded image data).
+- **JSON export** — tap Export in Settings. On **Android** a folder picker opens so you can save directly to Documents, Downloads, an SD card folder, or Google Drive. On **iOS** the share sheet appears with a "Save to Files" option. The file is named `memory-records-backup-YYYY-MM-DD.json` and contains all records and tags in a readable, pretty-printed format. Photo, video, and voice memo references are stored as local file paths (not embedded media data).
 - **JSON import** — in the Import panel, either tap **Pick JSON file** to select a backup file directly from your device, or paste the JSON text manually. Records are merged with existing ones; duplicates are avoided by ID.
 - **Import from Obsidian** — reimport previously saved Memory Records notes from your vault. On both Android and iOS, a file picker lets you navigate to your vault folder and select one or more `.md` files. Android users: in the picker, tap the **☰ menu → Internal storage**, then find `Obsidian → [vault] → Memory Records`.
 
@@ -229,7 +235,7 @@ Scan the QR code shown in the terminal with Expo Go.
 
 ## Privacy & security
 
-- **All data stays on your device.** Records, photos, tags, and settings are stored as JSON files in your phone's local document directory (`FileSystem.documentDirectory`). Nothing is uploaded to any server.
+- **All data stays on your device.** Records, photos, videos, voice memos, tags, and settings are stored in your phone's local document directory (`FileSystem.documentDirectory`). Nothing is uploaded to any server unless you explicitly use an AI feature or share/export data.
 - **Encrypted key storage.** AI API keys are stored using the device's secure enclave (expo-secure-store), the same mechanism used by banking apps. They are never written to plain storage.
 - **Local authentication.** Your login credentials are stored locally on this device and are never sent to a remote server.
 - **AI calls are direct.** When the AI Interviewer or Historical Events generator is active, your requests go directly from your device to Mistral or OpenAI using your own key — no intermediary server reads them.
