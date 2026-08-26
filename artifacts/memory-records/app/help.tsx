@@ -183,14 +183,14 @@ export default function HelpScreen() {
       <ScrollView style={s.scroll} contentContainerStyle={s.content}>
 
         <Text style={s.intro}>
-          <Text style={s.strong}>Memory Records</Text> is a personal memory journaling app that runs entirely on your device. Capture moments with photos, voice, or text — then save them to your Obsidian vault for long-term archiving. No account required, no cloud sync, no data ever leaves your phone unless you explicitly share it.
+          <Text style={s.strong}>Memory Records</Text> is a personal memory journaling app that runs entirely on your device. Capture moments with photos, voice memos, or text — then save them to your Obsidian vault for long-term archiving. Your local profile stays on the device, there is no cloud sync, and no data leaves your phone unless you explicitly use an AI feature or share/export it.
         </Text>
 
         <View style={s.divider} />
 
         <Section icon="camera" title="Capturing memories">
           <Bullet>
-            <Text style={s.strong}>Photo from gallery</Text> — pick any photo and the app automatically reads its EXIF metadata: date taken, GPS coordinates, and location name. Tap the photo on the detail screen to view it full-screen. A camera icon overlay on any card lets you replace the photo at any time.
+            <Text style={s.strong}>Photo from gallery</Text> — pick any photo and the app reads available EXIF metadata, including the date and GPS coordinates when the device exposes them. If no date is available, enter it manually. Tap the photo on the detail screen to view it full-screen. A camera icon overlay on any card lets you replace the photo at any time.
           </Bullet>
           <Bullet>
             <Text style={s.strong}>Video clip</Text> <Text style={[s.strong, { color: colors.primary }]}>(Pro)</Text> — pick a short video from your gallery. The first frame is extracted as a thumbnail shown on the card and detail screen. Tap the thumbnail to play the video in a full-screen player with native controls. Requires the AI feature pack.
@@ -205,7 +205,10 @@ export default function HelpScreen() {
             <Text style={s.strong}>Voice-to-text</Text> — tap the microphone to dictate your note hands-free. Speech recognition runs on-device in your chosen language (French, Italian, or English).
           </Bullet>
           <Bullet>
-            <Text style={s.strong}>Tags</Text> — add one or more tags to organise memories by theme, person, or place. Tags are shared across all records and manageable in Settings.
+            <Text style={s.strong}>Voice memos</Text> — record an audio clip in the Voice Memo section below the note. Play, pause, seek, replace, or delete it from the record. Audio stays local; records with a memo show a speaker icon and receive the searchable <Text style={s.strong}>#voice-memo</Text> tag automatically.
+          </Bullet>
+          <Bullet>
+            <Text style={s.strong}>Tags</Text> — add one or more tags to organise memories by theme, person, or place. The new-record picker uses a compact horizontal chip row. Settings has a collapsible tag section with compact chips, direct deletion, and a new-tag input.
           </Bullet>
           <Bullet>
             <Text style={s.strong}>Emotion tags</Text> — attach one of 22 colour-coded emotions (joy, nostalgia, gratitude, grief, …) to each memory. Emotions appear on the record card and can be used to group and filter the home list.
@@ -220,7 +223,7 @@ export default function HelpScreen() {
             The home list offers four sort modes, toggled with the pill bar at the top of the screen.
           </Bullet>
           <Bullet>
-            <Text style={s.strong}>Tag</Text> — grouped by primary tag, collapsed or expanded per group.
+            <Text style={s.strong}>Folder</Text> — grouped by primary tag, collapsed or expanded per group.
           </Bullet>
           <Bullet>
             <Text style={s.strong}>Emotion</Text> — grouped by emotion, each group shown in its colour.
@@ -232,13 +235,16 @@ export default function HelpScreen() {
             <Text style={s.strong}>Date</Text> — flat list sorted by Memory Year, most recent first. Records without a year appear at the bottom.
           </Bullet>
           <Bullet>
+            <Text style={s.strong}>Search</Text> — use the search field at the top of Home to find memories by note text, tag, emotion, or location. Grouped results expand automatically while searching, and <Text style={s.strong}>voice-memo</Text> finds every record with an audio clip.
+          </Bullet>
+          <Bullet>
             <Text style={s.strong}>Year rank reordering (Date mode)</Text> — in Date sort, each card shows its position within its year group as <Text style={s.strong}>N/M</Text> (e.g. 2/5). A column of controls appears on the right: ↑ and ↓ arrows to move the note one step within its year, and a delete button. The first move automatically assigns ranks to all notes in that year based on their current order. Ranks are saved and survive restarts.
           </Bullet>
         </Section>
 
         <Section icon="lock" title="Unlocking AI Features">
           <Bullet>
-            The <Text style={s.strong}>AI Interviewer</Text>, <Text style={s.strong}>Historical Events</Text> generator, and <Text style={s.strong}>Video Attachments</Text> are grouped into a single AI feature pack, unlocked by a one-time <Text style={s.strong}>€5 contribution via PayPal</Text>. All other features — capturing memories, sorting, tags, emotions, year ranks, Obsidian export, JSON backup — remain fully free with no payment required.
+            The <Text style={s.strong}>AI Interviewer</Text>, <Text style={s.strong}>Historical Events</Text> generator, and <Text style={s.strong}>Video Attachments</Text> are grouped into a single AI feature pack, unlocked by a one-time <Text style={s.strong}>€5 contribution via PayPal</Text>. All other features — capturing memories, voice memos, sorting, search, tags, emotions, year ranks, Obsidian export, JSON backup — remain fully free with no payment required.
           </Bullet>
           <Bullet>
             Open <Text style={s.strong}>Settings → AI Features</Text> and tap <Text style={s.strong}>Unlock</Text>, or tap the lock icon on the <Text style={s.strong}>Start interview</Text> toggle, <Text style={s.strong}>Generate [year] events</Text> button, or <Text style={s.strong}>Video</Text> mode tile. The unlock sheet appears.
@@ -250,7 +256,7 @@ export default function HelpScreen() {
             Tap <Text style={s.strong}>Contribute €5 via PayPal</Text>. A pre-filled PayPal form opens in your browser. In the PayPal message field, include your device ID so the payment can be matched automatically.
           </Bullet>
           <Bullet>
-            After completing the payment, return to the app and tap <Text style={s.strong}>I've paid — check payment status</Text>. The app queries the server and, if your payment is confirmed, unlocks both AI features immediately.
+            After completing the payment, return to the app and tap <Text style={s.strong}>I've paid — check payment status</Text>. The app queries the server and, if your payment is confirmed, unlocks the AI Interviewer, Historical Events, and Video Attachments immediately.
           </Bullet>
           <Bullet>
             <Text style={s.strong}>Activation code alternative</Text> — send your device ID to the developer (contact via GitHub). Once your payment is verified manually, you'll receive a code in the format <Text style={s.strong}>MR-XXXXXXXX</Text>. Tap <Text style={s.strong}>I have an activation code</Text>, enter it, and tap <Text style={s.strong}>Activate</Text>.
@@ -343,7 +349,7 @@ export default function HelpScreen() {
           </Bullet>
           <View style={{ height: 10 }} />
           <InfoBox>
-            Each note includes the date, memory year, tags, emotion, photo path, GPS coordinates, location name, and your full text. Notes are formatted in Markdown and are fully readable and searchable inside Obsidian.{"\n\n"}
+            Each note includes the date, memory year, tags, emotion, available photo path, GPS coordinates when present, location name, and your full text. Notes are formatted in Markdown and are fully readable and searchable inside Obsidian. Voice memo files remain in the app's local storage and are not embedded in the Markdown export.{"\n\n"}
             File names use the format <Text style={{ fontFamily: "Inter_600SemiBold" }}>YYYY-MM-DD[_tag][_year].md</Text> so they sort naturally in Obsidian's file tree.{"\n\n"}
             <Text style={{ fontFamily: "Inter_600SemiBold" }}>Import from Obsidian</Text> — if you have previously saved notes to Obsidian, you can reimport them. A file picker lets you select one or more .md files from your vault.{"\n"}
             • Android / Samsung: tap the <Text style={{ fontFamily: "Inter_600SemiBold" }}>☰ menu → Internal storage</Text>, then find <Text style={{ fontFamily: "Inter_600SemiBold" }}>Obsidian → [vault] → Memory Records</Text>.{"\n"}
@@ -353,7 +359,7 @@ export default function HelpScreen() {
 
         <Section icon="archive" title="Backup & restore">
           <Bullet>
-            <Text style={s.strong}>JSON export</Text> — tap Export in Settings. On Android a folder picker opens so you can save directly to Documents, Downloads, or Google Drive. On iPhone the share sheet appears with "Save to Files". The file is named <Text style={s.strong}>memory-records-backup-YYYY-MM-DD.json</Text> and is human-readable. Photo references are saved as local file paths, not embedded image data.
+            <Text style={s.strong}>JSON export</Text> — tap Export in Settings. On Android a folder picker opens so you can save directly to Documents, Downloads, or Google Drive. On iPhone the share sheet appears with "Save to Files". The file is named <Text style={s.strong}>memory-records-backup-YYYY-MM-DD.json</Text> and is human-readable. Photo, video, and voice memo references are saved as local file paths, not embedded media data.
           </Bullet>
           <Bullet>
             <Text style={s.strong}>JSON import</Text> — in the Import panel, tap <Text style={s.strong}>Pick JSON file</Text> to select a backup directly from your device, or paste the JSON text manually. Records are merged with existing ones — nothing is deleted. Duplicates are avoided by ID.
@@ -366,7 +372,7 @@ export default function HelpScreen() {
 
         <Section icon="shield" title="Privacy & security">
           <Bullet>
-            <Text style={s.strong}>All data stays on your device.</Text> Records, photos, tags, and settings are stored as JSON files in your phone's local document directory. Nothing is uploaded to any server.
+            <Text style={s.strong}>All data stays on your device.</Text> Records, photos, videos, voice memos, tags, and settings are stored in your phone's local document directory. Nothing is uploaded unless you explicitly use an AI feature or share/export data.
           </Bullet>
           <Bullet>
             <Text style={s.strong}>Encrypted key storage.</Text> Your AI API keys are stored using the device's secure enclave (expo-secure-store), the same mechanism used by banking apps. They are never written to plain storage.
@@ -498,7 +504,7 @@ export default function HelpScreen() {
 
         <View style={s.divider} />
 
-        <Text style={s.footerNote}>Memory Records v1.4{"\n"}Built with Expo · All data local · No tracking</Text>
+        <Text style={s.footerNote}>Memory Records{"\n"}Built with Expo · All data local · No tracking</Text>
       </ScrollView>
     </View>
   );
