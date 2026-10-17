@@ -2,11 +2,19 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
-import { copyVideoToAppStorage, deleteAppVideo } from "@/utils/storage";
+import {
+  copyImageToAppStorage,
+  copyThumbnailToAppStorage,
+  copyVideoToAppStorage,
+  deleteAppVideo,
+  deleteAppAudio,
+} from "@/utils/storage";
 import { VideoPlayerModal } from "@/components/VideoPlayerModal";
 import { PhotoViewerModal } from "@/components/PhotoViewerModal";
+import { VoiceMemoRecorder } from "@/components/VoiceMemoRecorder";
+import { VoiceMemoPlayer } from "@/components/VoiceMemoPlayer";
 import { router, useLocalSearchParams } from "expo-router";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
   Platform,
@@ -50,6 +58,7 @@ export default function RecordDetailScreen() {
   const yearInputRef = useRef<TextInput>(null);
   const [editedTags, setEditedTags] = useState<string[]>([]);
   const [editedEmotion, setEditedEmotion] = useState("neutral");
+  const [editedAudioUri, setEditedAudioUri] = useState<string | undefined>(undefined);
   const editInputRef = useRef<TextInput>(null);
   const currentYear = new Date().getFullYear();
 
@@ -64,6 +73,35 @@ export default function RecordDetailScreen() {
 
   const record = records.find((r) => r.id === id);
 
+  useEffect(() => {
+    if (!record?.videoUri || record.videoThumbnailUri) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const { getThumbnailAsync } = await import("expo-video-thumbnails");
+        const thumbnail = await getThumbnailAsync(record.videoUri!, { time: 0, quality: 0.7 });
+        let thumbnailUri = thumbnail.uri;
+        try {
+          thumbnailUri = await copyThumbnailToAppStorage(thumbnail.uri);
+        } catch {
+          // Expo Go can display VideoThumbnails cache files even when
+          // Expo FileSystem refuses permission to copy them.
+        }
+        if (!cancelled) {
+          await updateRecord(record.id, { videoThumbnailUri: thumbnailUri });
+        }
+      } catch (error) {
+        console.warn("Video thumbnail repair failed", error);
+        // Thumbnail repair is optional; keep the restored video playable.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [record?.id, record?.videoUri, record?.videoThumbnailUri, updateRecord]);
+
   if (!record) {
     return (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.background }}>
@@ -75,8 +113,9 @@ export default function RecordDetailScreen() {
   const handleStartEdit = () => {
     setEditedNote(record.note ?? "");
     setEditedYear(record.contextYear);
-    setEditedTags(record.tags ?? []);
+    setEditedTags((record.tags ?? []).filter((t) => t !== "voice-memo"));
     setEditedEmotion(record.emotion ?? "neutral");
+    setEditedAudioUri(record.audioUri);
     setIsEditing(true);
     setTimeout(() => editInputRef.current?.focus(), 100);
   };
@@ -87,6 +126,7 @@ export default function RecordDetailScreen() {
     setEditedYear(undefined);
     setEditedTags([]);
     setEditedEmotion("neutral");
+    setEditedAudioUri(undefined);
   };
 
   // Promote a tag to position 0 (primary); others keep their relative order.
@@ -104,16 +144,19 @@ export default function RecordDetailScreen() {
     const yearChanged = editedYear !== record.contextYear;
     const tagsChanged = JSON.stringify(editedTags) !== JSON.stringify(record.tags ?? []);
     const emotionChanged = editedEmotion !== (record.emotion ?? "neutral");
-    if (trimmed === record.note && !yearChanged && !tagsChanged && !emotionChanged) {
+    const audioChanged = editedAudioUri !== record.audioUri;
+    if (trimmed === record.note && !yearChanged && !tagsChanged && !emotionChanged && !audioChanged) {
       setIsEditing(false);
       return;
     }
     if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-    const newTags = editedTags.length > 0 ? editedTags : undefined;
+    const baseTags = editedTags.filter((t) => t !== "voice-memo");
+    const tagsWithAudio = editedAudioUri ? ["voice-memo", ...baseTags] : baseTags;
+    const newTags = tagsWithAudio.length > 0 ? tagsWithAudio : undefined;
     const newEditCount = (record.editCount ?? 0) + 1;
 
-    await updateRecord(record.id, { note: trimmed, contextYear: editedYear, tags: newTags, emotion: editedEmotion, editCount: newEditCount });
+    await updateRecord(record.id, { note: trimmed, contextYear: editedYear, tags: newTags, emotion: editedEmotion, editCount: newEditCount, audioUri: editedAudioUri });
     setIsEditing(false);
     setEditedNote("");
     setEditedTags([]);
@@ -679,7 +722,11 @@ export default function RecordDetailScreen() {
     });
     if (result.canceled || !result.assets?.[0]) return;
     if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    await updateRecord(record.id, { imageUri: result.assets[0].uri });
+    const asset = result.assets[0];
+    const extension = (asset.fileName?.split(".").pop() ?? asset.uri.split(".").pop() ?? "jpg")
+      .split("?")[0];
+    const durableImageUri = await copyImageToAppStorage(asset.uri, extension);
+    await updateRecord(record.id, { imageUri: durableImageUri });
   };
 
   const handlePickVideo = async () => {
@@ -692,10 +739,15 @@ export default function RecordDetailScreen() {
       Alert.alert("Permission Required", "Allow access to your photo library to pick videos.");
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["videos"], quality: 1 });
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["videos"],
+      quality: 1,
+    });
     if (result.canceled || !result.assets?.[0]) return;
 
     const asset = result.assets[0];
+
     try {
       const ext = (asset.uri.split(".").pop() ?? "mp4").split("?")[0];
       // Copy into documentDirectory/videos/ — that folder is included in
@@ -706,7 +758,11 @@ export default function RecordDetailScreen() {
       try {
         const { getThumbnailAsync } = await import("expo-video-thumbnails");
         const thumb = await getThumbnailAsync(destUri, { time: 0, quality: 0.7 });
-        thumbnailUri = thumb.uri;
+        try {
+          thumbnailUri = await copyThumbnailToAppStorage(thumb.uri);
+        } catch {
+          thumbnailUri = thumb.uri;
+        }
       } catch { /* thumbnail optional */ }
 
       if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -798,12 +854,16 @@ export default function RecordDetailScreen() {
                 <View style={s.videoPlayOverlay}>
                   <Feather name="play-circle" size={52} color="rgba(255,255,255,0.9)" />
                 </View>
+
               </Pressable>
             ) : (
-              <Pressable style={s.videoPlaceholder} onPress={isEditing ? undefined : handlePickVideo}>
+              <Pressable
+                style={s.videoPlaceholder}
+                onPress={isEditing ? undefined : () => setVideoModalUri(record.videoUri!)}
+              >
                 <Feather name="video" size={36} color={colors.primary} />
                 <Text style={[s.videoPlaceholderText, { color: colors.primary }]}>
-                  {isEditing ? "No thumbnail" : "Tap to replace video"}
+                  {isEditing ? "No thumbnail" : "Tap to play video"}
                 </Text>
               </Pressable>
             )}
@@ -1083,6 +1143,15 @@ export default function RecordDetailScreen() {
                   )}
                 </View>
 
+                {/* Voice memo — available while editing */}
+                <View style={{ marginTop: 4 }}>
+                  <VoiceMemoRecorder
+                    audioUri={editedAudioUri}
+                    onSaved={(uri) => setEditedAudioUri(uri)}
+                    onDeleted={() => setEditedAudioUri(undefined)}
+                  />
+                </View>
+
                 <View style={s.editActions}>
                   <Pressable style={s.editCancelInline} onPress={handleCancelEdit}>
                     <Text style={s.editCancelInlineText}>Cancel</Text>
@@ -1095,7 +1164,14 @@ export default function RecordDetailScreen() {
                 </View>
               </>
             ) : (
-              <Text style={s.noteText}>{record.note || "No note added."}</Text>
+              <>
+                <Text style={s.noteText}>{record.note || "No note added."}</Text>
+                {record.audioUri && (
+                  <View style={{ marginTop: 12 }}>
+                    <VoiceMemoPlayer uri={record.audioUri} />
+                  </View>
+                )}
+              </>
             )}
           </View>
 
@@ -1145,7 +1221,10 @@ export default function RecordDetailScreen() {
         onClose={() => setShowUnlockModal(false)}
       />
       <PhotoViewerModal uri={photoModalUri} onClose={() => setPhotoModalUri(null)} />
-      <VideoPlayerModal uri={videoModalUri} onClose={() => setVideoModalUri(null)} />
+      <VideoPlayerModal
+        uri={videoModalUri}
+        onClose={() => setVideoModalUri(null)}
+      />
     </View>
   );
 }

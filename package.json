@@ -1,8 +1,10 @@
 {
   "name": "workspace",
   "version": "0.0.0",
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "scripts": {
+    "android:prepare": "pnpm --filter @workspace/memory-records run android:prepare",
+    "android:check": "pnpm --filter @workspace/memory-records run android:check",
     "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",

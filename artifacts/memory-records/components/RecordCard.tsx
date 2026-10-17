@@ -261,6 +261,7 @@ export function RecordCard({
             <View style={s.videoPlayBadge}>
               <Feather name="play" size={8} color="#fff" />
             </View>
+
           </View>
         ) : record.imageUri ? (
           <View>
@@ -322,6 +323,9 @@ export function RecordCard({
                 <Text style={[s.emotionDotText, { color: emotion.color }]}>{emotion.label}</Text>
               </View>
             )}
+            {record.audioUri ? (
+              <Feather name="volume-2" size={11} color={colors.primary} />
+            ) : null}
             {record.location ? (
               <>
                 <Feather name="map-pin" size={11} color={colors.mutedForeground} />

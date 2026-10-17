@@ -30,7 +30,7 @@ export function VideoPlayerModal({ uri, onClose }: Props) {
             player={player}
             style={s.video}
             nativeControls
-            allowsFullscreen
+            fullscreenOptions={{ enable: true }}
             allowsPictureInPicture
             contentFit="contain"
           />

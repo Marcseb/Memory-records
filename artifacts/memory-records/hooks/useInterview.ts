@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import * as SecureStore from "expo-secure-store";
+import { getSecureItem } from "@/utils/secureStorage";
 
 const MISTRAL_KEY_STORE = "mr_mistral_key";
 const OPENAI_KEY_STORE = "mr_openai_key";
@@ -109,8 +109,8 @@ async function fetchQuestion(
   contextNotes: ContextNote[] = []
 ): Promise<string> {
   const [mistralKey, openaiKey] = await Promise.all([
-    SecureStore.getItemAsync(MISTRAL_KEY_STORE),
-    SecureStore.getItemAsync(OPENAI_KEY_STORE),
+    getSecureItem(MISTRAL_KEY_STORE),
+    getSecureItem(OPENAI_KEY_STORE),
   ]);
 
   const hasMistral = !!mistralKey?.trim();

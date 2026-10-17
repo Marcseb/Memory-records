@@ -1,7 +1,14 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
-import { copyVideoToAppStorage, deleteAppVideo } from "@/utils/storage";
+import {
+  copyImageToAppStorage,
+  copyThumbnailToAppStorage,
+  copyVideoToAppStorage,
+  deleteAppVideo,
+  deleteAppAudio,
+} from "@/utils/storage";
+import { VoiceMemoRecorder } from "@/components/VoiceMemoRecorder";
 import { Image } from "expo-image";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router, useLocalSearchParams } from "expo-router";
@@ -28,7 +35,7 @@ import { useInterview, ContextNote } from "@/hooks/useInterview";
 import { useColors } from "@/hooks/useColors";
 import { useUnlock } from "@/context/UnlockContext";
 import { UnlockModal } from "@/components/UnlockModal";
-import { readGpsFromJpeg, debugGpsRead } from "@/utils/exif-gps";
+import { readGpsFromJpeg, readGpsFromOriginalFile } from "@/utils/exif-gps";
 
 interface PhotoData {
   uri: string;
@@ -184,7 +191,7 @@ export default function NewRecordScreen() {
 
   const [mode, setMode] = useState<"photo" | "note" | null>(null);
   const [photo, setPhoto] = useState<PhotoData | null>(null);
-  const [video, setVideo] = useState<{ uri: string; thumbnailUri: string | null; date?: string } | null>(null);
+  const [video, setVideo] = useState<{ uri: string; thumbnailUri: string | null; date?: string; duration?: number } | null>(null);
   const [videoLoading, setVideoLoading] = useState(false);
   const [note, setNote] = useState("");
   const [manualDate, setManualDate] = useState(todayString());
@@ -193,6 +200,7 @@ export default function NewRecordScreen() {
   const [yearInputText, setYearInputText] = useState("");
   const yearInputRef = useRef<TextInput>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [audioUri, setAudioUri] = useState<string | undefined>(undefined);
   const currentYear = new Date().getFullYear();
 
   const commitYearInput = () => {
@@ -269,19 +277,18 @@ export default function NewRecordScreen() {
     if (result.canceled || !result.assets?.[0]) return;
     const asset = result.assets[0];
     const exifDate = parseExifDate(asset.exif as Record<string, unknown> | null);
-    // Try Expo's parsed EXIF first; fall back to our own JPEG byte parser for
-    // Android where Expo returns GPSLatitude/GPSLongitude as 0.
-    const expoGps = parseGpsFromExif(asset.exif as Record<string, unknown> | null);
-    let fileGps: { lat: number; lng: number } | undefined;
-    if (!expoGps) {
-      try { fileGps = await readGpsFromJpeg(asset.uri); } catch { /* swallow */ }
-    }
-    const gps = expoGps ?? fileGps;
-    if (__DEV__) {
-      const dbg = await debugGpsRead(asset.uri);
-      Alert.alert("GPS debug", `q=1 URI:${asset.uri.slice(0, 35)}\n${dbg}`);
-    }
-    setPhoto({ uri: asset.uri, date: exifDate, hasMetadata: !!exifDate, lat: gps?.lat, lng: gps?.lng });
+    // 1. Try Expo's parsed EXIF (works on iOS).
+    // 2. Parse the cached file's raw EXIF bytes.
+    // 3. On Android, Expo zeroes GPS rationals when copying to cache — fall back
+    //    to reading the original source file from the device's DCIM directory.
+    const gps =
+      parseGpsFromExif(asset.exif as Record<string, unknown> | null) ??
+      (await readGpsFromJpeg(asset.uri)) ??
+      (await readGpsFromOriginalFile(asset.fileName));
+    const extension = (asset.fileName?.split(".").pop() ?? asset.uri.split(".").pop() ?? "jpg")
+      .split("?")[0];
+    const durableImageUri = await copyImageToAppStorage(asset.uri, extension);
+    setPhoto({ uri: durableImageUri, date: exifDate, hasMetadata: !!exifDate, lat: gps?.lat, lng: gps?.lng });
     if (exifDate) setManualDate(exifDate);
     setMode("photo");
   };
@@ -304,11 +311,14 @@ export default function NewRecordScreen() {
       Alert.alert("Permission Required", "Allow access to your photo library to pick videos.");
       return;
     }
+
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["videos"],
       quality: 1,
     });
     if (result.canceled || !result.assets?.[0]) return;
+
+    const asset = result.assets[0];
 
     setVideoLoading(true);
     setMode("photo");
@@ -321,7 +331,6 @@ export default function NewRecordScreen() {
     }
 
     try {
-      const asset = result.assets[0];
       const ext = (asset.uri.split(".").pop() ?? "mp4").split("?")[0];
       // Copy into documentDirectory/videos/ — that folder is included in
       // iCloud backups by default, keeping videos safe through backup/restore.
@@ -331,7 +340,11 @@ export default function NewRecordScreen() {
       try {
         const { getThumbnailAsync } = await import("expo-video-thumbnails");
         const thumb = await getThumbnailAsync(destUri, { time: 0, quality: 0.7 });
-        thumbnailUri = thumb.uri;
+        try {
+          thumbnailUri = await copyThumbnailToAppStorage(thumb.uri);
+        } catch {
+          thumbnailUri = thumb.uri;
+        }
       } catch {
         /* thumbnail optional — play-icon fallback shown */
       }
@@ -470,7 +483,13 @@ export default function NewRecordScreen() {
       imageUri: photo?.uri,
       videoUri: video?.uri,
       videoThumbnailUri: video?.thumbnailUri ?? undefined,
-      tags: selectedTags.length > 0 ? selectedTags : undefined,
+      audioUri,
+
+      tags: (() => {
+        const base = selectedTags.filter((t) => t !== "voice-memo");
+        const withAudio = audioUri ? ["voice-memo", ...base] : base;
+        return withAudio.length > 0 ? withAudio : undefined;
+      })(),
       emotion: selectedEmotion,
       note: note.trim(),
       date: photo?.date ?? manualDate,
@@ -715,9 +734,10 @@ export default function NewRecordScreen() {
     // Tag section
     tagRow: {
       flexDirection: "row",
-      flexWrap: "wrap",
       gap: 8,
       alignItems: "center",
+      paddingVertical: 2,
+      paddingHorizontal: 1,
     },
     tagChip: {
       paddingHorizontal: 12,
@@ -1488,7 +1508,12 @@ export default function NewRecordScreen() {
           {/* Tag section */}
           <View style={s.section}>
             <Text style={s.sectionLabel}>Tags (optional)</Text>
-            <View style={s.tagRow}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={s.tagRow}
+            >
               {knownTags.map((tag) => {
                 const orderIndex = selectedTags.indexOf(tag);
                 const isSelected = orderIndex !== -1;
@@ -1515,7 +1540,7 @@ export default function NewRecordScreen() {
                   <Text style={s.addTagBtnText}>New tag</Text>
                 </Pressable>
               )}
-            </View>
+            </ScrollView>
             {showNewTagInput && (
               <View style={s.newTagRow}>
                 <TextInput
@@ -1709,6 +1734,16 @@ export default function NewRecordScreen() {
                 </Pressable>
               </View>
             </View>
+          </View>
+
+          {/* Voice Memo section */}
+          <View style={s.section}>
+            <Text style={s.sectionLabel}>Voice Memo</Text>
+            <VoiceMemoRecorder
+              audioUri={audioUri}
+              onSaved={(uri) => setAudioUri(uri)}
+              onDeleted={() => setAudioUri(undefined)}
+            />
           </View>
 
           {/* Obsidian hint */}

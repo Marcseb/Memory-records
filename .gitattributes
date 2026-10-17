@@ -1,0 +1,1 @@
+downloads/memory-records-snapshot-test.apk filter=lfs diff=lfs merge=lfs -text

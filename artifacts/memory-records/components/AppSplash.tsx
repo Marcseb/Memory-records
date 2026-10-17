@@ -5,7 +5,7 @@ interface AppSplashProps {
   onDone: () => void;
 }
 
-const ICON = require("@/assets/images/memory-records_icon.jpg");
+const ICON = require("@/assets/images/memory-records_icon.png");
 
 const FADE_IN_MS  = 600;
 const HOLD_MS     = 1800;
@@ -43,7 +43,11 @@ export function AppSplash({ onDone }: AppSplashProps) {
 
 const s = StyleSheet.create({
   container: {
-    ...StyleSheet.absoluteFillObject,
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
     backgroundColor: "#0f0f1a",
     alignItems: "center",
     justifyContent: "center",

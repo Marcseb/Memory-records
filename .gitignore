@@ -47,3 +47,12 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# User-provided files and chat uploads; do not add them to public source syncs.
+/attached_assets/
+
+# Replit Agent notes are workspace context, not public application source.
+/.agents/
+
+# Generated APKs are build outputs, not source files.
+/downloads/

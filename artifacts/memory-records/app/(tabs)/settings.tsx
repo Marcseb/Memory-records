@@ -5,14 +5,18 @@ import * as FileSystem from "expo-file-system/legacy";
 import { StorageAccessFramework } from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import * as Haptics from "expo-haptics";
-import * as SecureStore from "expo-secure-store";
-import React, { useEffect, useState } from "react";
+import Constants from "expo-constants";
+import { getSecureItem, setSecureItem } from "@/utils/secureStorage";
+import React, { useCallback, useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
+  DeviceEventEmitter,
   Keyboard,
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   Share,
   StyleSheet,
   Text,
@@ -21,7 +25,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { useAuth } from "@/context/AuthContext";
 import { MemoryRecord, useRecords } from "@/context/RecordsContext";
 import { VoiceLanguage, VOICE_LANGUAGES, useSettings } from "@/context/SettingsContext";
@@ -31,13 +35,84 @@ import { useColors } from "@/hooks/useColors";
 import { zipSync } from "fflate";
 import { buildAllExportData } from "@/hooks/useObsidian";
 import { isObsidianMarkdown, parseMultipleObsidianNotes, parseObsidianNote } from "@/utils/obsidianParser";
+import { getVideoStorageSize, formatBytes } from "@/utils/storage";
+import {
+  recoverPreviousExpoData,
+  scanPreviousExpoData,
+  type ExpoRecoveryCandidate,
+} from "@/utils/expoDataRecovery";
+import {
+  createCompleteBackup,
+  discardCompleteRestore,
+  inspectCompleteBackup,
+  restoreCompleteBackup,
+  type CompleteBackupInspection,
+  type CompleteBackupProgress,
+} from "@/utils/completeBackup";
+import {
+  deleteLocalSnapshot,
+  discardLocalSnapshotRestore,
+  getSnapshotStatus,
+  listLocalSnapshots,
+  resetSnapshotTestHistory,
+  SNAPSHOT_CHANGE_LOGIC_VERSION,
+  stageLocalSnapshotRestore,
+  type SnapshotProgress,
+  type SnapshotStatus,
+  type SnapshotSummary,
+} from "@/utils/localSnapshots";
+import {
+  getCompleteBackupReminderStatus,
+  markCompleteBackupSuccessful,
+  requireCompleteBackupAfterRestore,
+  snoozeCompleteBackupReminder,
+  type CompleteBackupReminderStatus,
+} from "@/utils/completeBackupReminder";
 
 export default function SettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { resetAllData } = useAuth();
-  const { records, knownTags, deleteTag, importRecords } = useRecords();
+  const { records, knownTags, addTag, deleteTag, importRecords } = useRecords();
   const { settings, updateSettings } = useSettings();
+  const isSnapshotTestBuild = Constants.expoConfig?.extra?.snapshotTestBuild === true;
+  const advanceSnapshotTestDate = async (days: number) => {
+    const current = settings.snapshotTestDate
+      ? new Date(settings.snapshotTestDate)
+      : new Date();
+    current.setDate(current.getDate() + days);
+    await updateSettings({ snapshotTestDate: current.toISOString() });
+  };
+  const handleResetSnapshotTestHistory = () => {
+    Alert.alert(
+      "Reset snapshot history?",
+      "Every local snapshot and its vaulted snapshot media will be permanently deleted. Memories, tags, and settings will remain. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reset history",
+          style: "destructive",
+          onPress: () => {
+            (async () => {
+              setSnapshotBusy(true);
+              try {
+                await resetSnapshotTestHistory();
+                await refreshLocalSnapshots();
+                Alert.alert(
+                  "Snapshot history reset",
+                  "The existing memories and settings were kept. Leave the app open briefly to create a fresh baseline snapshot.",
+                );
+              } catch (error) {
+                Alert.alert("Snapshot history reset failed", String(error));
+              } finally {
+                setSnapshotBusy(false);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  };
   const [vaultName, setVaultName] = useState(settings.vaultName);
   const [folder, setFolder] = useState(settings.folder);
   const [authorName, setAuthorName] = useState(settings.authorName);
@@ -49,7 +124,93 @@ export default function SettingsScreen() {
   const [exportingToObsidian, setExportingToObsidian] = useState(false);
   const [exportProgress, setExportProgress] = useState<{ current: number; total: number } | null>(null);
 
+  const [videoStorage, setVideoStorage] = useState<{ bytes: number; fileCount: number } | null>(null);
+  const [recoveringPreviousData, setRecoveringPreviousData] = useState(false);
+  const [completeBackupBusy, setCompleteBackupBusy] = useState(false);
+  const [completeBackupProgress, setCompleteBackupProgress] = useState<CompleteBackupProgress | null>(null);
+  const [completeBackupOperation, setCompleteBackupOperation] =
+    useState<"backup" | "restore" | null>(null);
+  const [completeBackupReminder, setCompleteBackupReminder] =
+    useState<CompleteBackupReminderStatus | null>(null);
+  const [localSnapshots, setLocalSnapshots] = useState<SnapshotSummary[]>([]);
+  const [snapshotStatus, setSnapshotStatus] = useState<SnapshotStatus | null>(null);
+  const [snapshotBusy, setSnapshotBusy] = useState(false);
+  const [snapshotRestoreProgress, setSnapshotRestoreProgress] = useState<SnapshotProgress | null>(null);
+  const settingsFocusedRef = React.useRef(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      getVideoStorageSize().then((result) => {
+        if (!cancelled) setVideoStorage(result);
+      }).catch(() => {});
+      return () => { cancelled = true; };
+    }, [])
+  );
+
+  const refreshLocalSnapshots = useCallback(async () => {
+    try {
+      const status = await getSnapshotStatus();
+      setSnapshotStatus(status);
+    } catch (error) {
+      console.warn("[LocalSnapshots] status failed:", error);
+    }
+    // Let the success timestamp render before the more expensive operation
+    // verifies every retained media blob for Snapshot History.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    try {
+      setLocalSnapshots(await listLocalSnapshots());
+    } catch (error) {
+      console.warn("[LocalSnapshots] history failed:", error);
+    }
+  }, []);
+
+  const refreshCompleteBackupReminder = useCallback(async () => {
+    try {
+      setCompleteBackupReminder(await getCompleteBackupReminderStatus(records.length));
+    } catch (error) {
+      console.warn("[CompleteBackupReminder] status failed:", error);
+    }
+  }, [records.length]);
+
+  const refreshSnapshotStatus = useCallback(async () => {
+    try {
+      setSnapshotStatus(await getSnapshotStatus());
+    } catch (error) {
+      console.warn("[LocalSnapshots] status failed:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    const subscription = DeviceEventEmitter.addListener(
+      "localSnapshotChanged",
+      () => {
+        if (settingsFocusedRef.current) {
+          refreshLocalSnapshots().catch(() => {});
+        } else {
+          // Settings tabs remain mounted while hidden. Keep this global listener
+          // lightweight; full vault verification runs only when Settings is open.
+          refreshSnapshotStatus().catch(() => {});
+        }
+      },
+    );
+    return () => subscription.remove();
+  }, [refreshLocalSnapshots, refreshSnapshotStatus]);
+
+  useFocusEffect(
+    useCallback(() => {
+      settingsFocusedRef.current = true;
+      refreshLocalSnapshots().catch(() => {});
+      refreshCompleteBackupReminder().catch(() => {});
+      return () => {
+        settingsFocusedRef.current = false;
+      };
+    }, [refreshCompleteBackupReminder, refreshLocalSnapshots]),
+  );
+
   const { isAiUnlocked, checkStatus, isChecking } = useUnlock();
+  const [tagsCollapsed, setTagsCollapsed] = useState(true);
+  const [newTagDraft, setNewTagDraft] = useState("");
   const [showUnlockModal, setShowUnlockModal] = useState(false);
 
   const [mistralKey, setMistralKey] = useState("");
@@ -62,8 +223,8 @@ export default function SettingsScreen() {
     (async () => {
       try {
         const [m, o] = await Promise.all([
-          SecureStore.getItemAsync("mr_mistral_key"),
-          SecureStore.getItemAsync("mr_openai_key"),
+          getSecureItem("mr_mistral_key"),
+          getSecureItem("mr_openai_key"),
         ]);
         if (m) setMistralKey(m);
         if (o) setOpenaiKey(o);
@@ -107,6 +268,249 @@ export default function SettingsScreen() {
       }
     } catch (e) {
       Alert.alert("Export Error", String(e));
+    }
+  };
+
+  const handleCreateCompleteBackup = async () => {
+    if (Platform.OS !== "android") {
+      Alert.alert(
+        "Android folder backup",
+        "Complete folder backups are currently available on Android. The existing JSON backup remains available on other platforms.",
+      );
+      return;
+    }
+
+    setCompleteBackupBusy(true);
+    setCompleteBackupOperation("backup");
+    try {
+      const permission = await StorageAccessFramework.requestDirectoryPermissionsAsync();
+      if (!permission.granted) return;
+
+      const result = await createCompleteBackup(
+        permission.directoryUri,
+        records,
+        knownTags,
+        settings,
+        setCompleteBackupProgress,
+      );
+      await markCompleteBackupSuccessful();
+      await refreshCompleteBackupReminder();
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      Alert.alert(
+        "Complete Backup Saved",
+        `${result.filename} was created with ${records.length} record${records.length !== 1 ? "s" : ""} and ${result.mediaCount} media file${result.mediaCount !== 1 ? "s" : ""}.` +
+          (result.skippedThumbnailCount > 0
+            ? `\n\n${result.skippedThumbnailCount} inaccessible video thumbnail${result.skippedThumbnailCount !== 1 ? "s were" : " was"} skipped. The video itself is included and will show a play-icon placeholder after restore.`
+            : ""),
+      );
+    } catch (error) {
+      Alert.alert(
+        "Complete Backup Failed",
+        `${String(error)}\n\nNo valid complete-backup manifest was left behind. Your original records and media were not changed.`,
+      );
+    } finally {
+      setCompleteBackupBusy(false);
+      setCompleteBackupProgress(null);
+      setCompleteBackupOperation(null);
+    }
+  };
+
+  const performCompleteRestore = async (inspection: CompleteBackupInspection) => {
+    setCompleteBackupBusy(true);
+    setCompleteBackupOperation("restore");
+    let stagedRestore: Awaited<ReturnType<typeof restoreCompleteBackup>> | null = null;
+    let recordsCommitted = false;
+    try {
+      stagedRestore = await restoreCompleteBackup(inspection, setCompleteBackupProgress);
+      await importRecords(stagedRestore.records, stagedRestore.tags);
+      recordsCommitted = true;
+      await requireCompleteBackupAfterRestore();
+      await refreshCompleteBackupReminder();
+
+      let settingsWarning = "";
+      try {
+        await updateSettings(stagedRestore.settings);
+        setVaultName(stagedRestore.settings.vaultName);
+        setFolder(stagedRestore.settings.folder);
+        setAuthorName(stagedRestore.settings.authorName);
+      } catch (settingsError) {
+        settingsWarning = `\n\nRecords and media were restored, but settings could not be restored: ${String(settingsError)}`;
+      }
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+      Alert.alert(
+        "Complete Restore Finished",
+        `${stagedRestore.records.length} record${stagedRestore.records.length !== 1 ? "s were" : " was"} restored with ${stagedRestore.mediaCount} media file${stagedRestore.mediaCount !== 1 ? "s" : ""}. Existing unrelated records were kept.${settingsWarning}`,
+      );
+    } catch (error) {
+      if (stagedRestore && !recordsCommitted) await discardCompleteRestore(stagedRestore);
+      if (recordsCommitted) {
+        Alert.alert(
+          "Restore Completed with a Warning",
+          `Records and media were restored, but a later non-data step failed: ${String(error)}`,
+        );
+      } else {
+        Alert.alert(
+          "Complete Restore Failed",
+          `${String(error)}\n\nThe backup was not imported and existing records were not changed.`,
+        );
+      }
+    } finally {
+      setCompleteBackupBusy(false);
+      setCompleteBackupProgress(null);
+      setCompleteBackupOperation(null);
+    }
+  };
+
+  const handleRestoreCompleteBackup = async () => {
+    if (Platform.OS !== "android") {
+      Alert.alert(
+        "Android folder restore",
+        "Complete folder restore is currently available on Android.",
+      );
+      return;
+    }
+
+    setCompleteBackupBusy(true);
+    setCompleteBackupOperation("restore");
+    try {
+      const picked = await DocumentPicker.getDocumentAsync({
+        type: ["application/zip", "application/octet-stream", "*/*"],
+        multiple: false,
+        copyToCacheDirectory: false,
+      });
+      if (picked.canceled || picked.assets.length === 0) return;
+      const inspection = await inspectCompleteBackup(picked.assets[0].uri);
+      setCompleteBackupBusy(false);
+
+      const { manifest } = inspection;
+      Alert.alert(
+        "Restore Complete Backup?",
+        `Backup created ${new Date(manifest.createdAt).toLocaleString()}.\n\n${manifest.records.length} record${manifest.records.length !== 1 ? "s" : ""} and ${manifest.media.length} media file${manifest.media.length !== 1 ? "s" : ""} will be restored. Records with matching IDs return to the backup version; unrelated current records are kept.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Restore",
+            onPress: () => {
+              performCompleteRestore(inspection).catch(() => {});
+            },
+          },
+        ],
+      );
+    } catch (error) {
+      Alert.alert("Invalid Complete Backup", String(error));
+    } finally {
+      setCompleteBackupBusy(false);
+      setCompleteBackupProgress(null);
+      setCompleteBackupOperation(null);
+    }
+  };
+
+  const performPreviousDataRecovery = async (candidates: ExpoRecoveryCandidate[]) => {
+    setRecoveringPreviousData(true);
+    try {
+      const recoveredById = new Map<string, MemoryRecord>();
+      const recoveredTags = new Set<string>();
+      let mediaCopied = 0;
+      let mediaMissing = 0;
+
+      for (const candidate of candidates) {
+        const result = await recoverPreviousExpoData(candidate);
+        for (const record of result.records) {
+          if (!recoveredById.has(record.id)) recoveredById.set(record.id, record);
+        }
+        for (const tag of result.tags) recoveredTags.add(tag);
+        mediaCopied += result.mediaCopied;
+        mediaMissing += result.mediaMissing;
+      }
+
+      const currentById = new Map(records.map((record) => [record.id, record]));
+      const isCopiedRecoveryUri = (uri: string | undefined, category: string) =>
+        Boolean(uri?.includes(`/recovered/${category}/`));
+      const recoveredRecords = Array.from(recoveredById.values()).map((recovered) => {
+        const current = currentById.get(recovered.id);
+        if (!current) return recovered;
+
+        // JSON restore can recreate record metadata while leaving media URIs
+        // pointed at an inaccessible Expo Go scope. Preserve current metadata
+        // and replace only media that recovery successfully copied.
+        return {
+          ...current,
+          imageUri: isCopiedRecoveryUri(recovered.imageUri, "images")
+            ? recovered.imageUri
+            : current.imageUri,
+          videoUri: isCopiedRecoveryUri(recovered.videoUri, "videos")
+            ? recovered.videoUri
+            : current.videoUri,
+          videoThumbnailUri: isCopiedRecoveryUri(recovered.videoThumbnailUri, "thumbnails")
+            ? recovered.videoThumbnailUri
+            : current.videoThumbnailUri,
+          audioUri: isCopiedRecoveryUri(recovered.audioUri, "audio")
+            ? recovered.audioUri
+            : current.audioUri,
+        };
+      });
+      await importRecords(recoveredRecords, Array.from(recoveredTags));
+      await requireCompleteBackupAfterRestore();
+      await refreshCompleteBackupReminder();
+      if (Platform.OS !== "web") {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+
+      const mediaSummary =
+        mediaCopied > 0
+          ? ` ${mediaCopied} attached media file${mediaCopied !== 1 ? "s were" : " was"} copied.`
+          : "";
+      const missingSummary =
+        mediaMissing > 0
+          ? ` ${mediaMissing} referenced media file${mediaMissing !== 1 ? "s were" : " was"} no longer available.`
+          : "";
+      Alert.alert(
+        "Recovery Complete",
+        `${recoveredRecords.length} memor${recoveredRecords.length === 1 ? "y was" : "ies were"} restored or repaired.${mediaSummary}${missingSummary}\n\nPlease create a complete backup now.`,
+      );
+    } catch (error) {
+      Alert.alert("Recovery Failed", String(error));
+    } finally {
+      setRecoveringPreviousData(false);
+    }
+  };
+
+  const handlePreviousDataRecovery = async () => {
+    if (Platform.OS === "web") {
+      Alert.alert("Android only", "Open this tool inside Expo Go on the phone that held your memories.");
+      return;
+    }
+
+    setRecoveringPreviousData(true);
+    try {
+      const candidates = await scanPreviousExpoData();
+      setRecoveringPreviousData(false);
+
+      if (candidates.length === 0) {
+        Alert.alert(
+          "No Previous Data Found",
+          "No older Memory Records files were visible to this Expo Go session. Do not uninstall Expo Go; an existing JSON backup or Obsidian export may still restore your notes.",
+        );
+        return;
+      }
+
+      const uniqueIds = new Set(candidates.flatMap((candidate) => candidate.records.map((record) => record.id)));
+      Alert.alert(
+        "Previous Data Found",
+        `${uniqueIds.size} memor${uniqueIds.size === 1 ? "y" : "ies"} found in ${candidates.length} previous app storage ${candidates.length === 1 ? "folder" : "folders"}.\n\nRecovery will copy them into this version and keep any current records. The old data will not be deleted.`,
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Recover",
+            onPress: () => {
+              performPreviousDataRecovery(candidates).catch(() => {});
+            },
+          },
+        ],
+      );
+    } catch (error) {
+      setRecoveringPreviousData(false);
+      Alert.alert("Scan Failed", String(error));
     }
   };
 
@@ -431,8 +835,8 @@ export default function SettingsScreen() {
     setAiKeysSaving(true);
     try {
       await Promise.all([
-        SecureStore.setItemAsync("mr_mistral_key", mistralKey.trim()),
-        SecureStore.setItemAsync("mr_openai_key", openaiKey.trim()),
+        setSecureItem("mr_mistral_key", mistralKey.trim()),
+        setSecureItem("mr_openai_key", openaiKey.trim()),
       ]);
       if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert("Saved", "AI keys saved securely on this device.");
@@ -452,6 +856,116 @@ export default function SettingsScreen() {
         { text: "Delete", style: "destructive", onPress: () => deleteTag(tag) },
       ]
     );
+  };
+
+  const handleRestoreLocalSnapshot = (snapshot: SnapshotSummary) => {
+    Alert.alert(
+      "Restore local snapshot?",
+      `${new Date(snapshot.createdAt).toLocaleString()}\n\n${snapshot.recordCount} records and ${snapshot.mediaCount} media files will be staged and verified. Matching IDs will be replaced; unrelated current records stay.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Restore",
+          onPress: () => {
+            (async () => {
+              setSnapshotBusy(true);
+              setSnapshotRestoreProgress({ stage: "Preparing snapshot restore", current: 0, total: 0 });
+              let staged: Awaited<ReturnType<typeof stageLocalSnapshotRestore>> | null = null;
+              let committed = false;
+              try {
+                staged = await stageLocalSnapshotRestore(snapshot.id, setSnapshotRestoreProgress);
+                setSnapshotRestoreProgress({
+                  stage: "Restoring memories and tags",
+                  current: 0,
+                  total: staged.records.length,
+                });
+                await importRecords(staged.records, staged.tags);
+                committed = true;
+                await requireCompleteBackupAfterRestore();
+                await refreshCompleteBackupReminder();
+                setSnapshotRestoreProgress({
+                  stage: "Restoring settings",
+                  current: staged.records.length,
+                  total: staged.records.length,
+                });
+                const restoredSettings = isSnapshotTestBuild
+                  ? { ...staged.settings, snapshotTestDate: settings.snapshotTestDate }
+                  : staged.settings;
+                await updateSettings(restoredSettings);
+                setVaultName(restoredSettings.vaultName);
+                setFolder(restoredSettings.folder);
+                setAuthorName(restoredSettings.authorName);
+                await refreshLocalSnapshots();
+                Alert.alert(
+                  "Snapshot restored",
+                  "Matching memories were replaced and unrelated memories were kept.\n\nCreate a fresh complete backup now to protect the restored library outside this device.",
+                  [
+                    {
+                      text: "Remind Me Later",
+                      onPress: () => {
+                        snoozeCompleteBackupReminder()
+                          .then(refreshCompleteBackupReminder)
+                          .catch(() => {});
+                      },
+                    },
+                    {
+                      text: "Create Backup",
+                      onPress: () => {
+                        handleCreateCompleteBackup().catch(() => {});
+                      },
+                    },
+                  ],
+                );
+              } catch (error) {
+                if (staged && !committed) await discardLocalSnapshotRestore(staged);
+                Alert.alert(
+                  committed ? "Restore completed with a warning" : "Snapshot restore failed",
+                  String(error),
+                );
+              } finally {
+                setSnapshotRestoreProgress(null);
+                setSnapshotBusy(false);
+              }
+            })().catch(() => {});
+          },
+        },
+      ],
+    );
+  };
+
+  const handleDeleteLocalSnapshot = (snapshot: SnapshotSummary) => {
+    Alert.alert(
+      "Delete local snapshot?",
+      `${new Date(snapshot.createdAt).toLocaleString()}\n\nThis restore point will be removed. Other retained snapshots are not affected.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            (async () => {
+              setSnapshotBusy(true);
+              try {
+                await deleteLocalSnapshot(snapshot.id);
+                await refreshLocalSnapshots();
+              } catch (error) {
+                Alert.alert("Could not delete snapshot", String(error));
+              } finally {
+                setSnapshotBusy(false);
+              }
+            })().catch(() => {});
+          },
+        },
+      ],
+    );
+  };
+
+  const handleAddTag = async () => {
+    const normalized = newTagDraft.trim();
+    if (!normalized) return;
+    await addTag(normalized);
+    setNewTagDraft("");
+    Keyboard.dismiss();
   };
 
   const handleStorageDiagnostic = async () => {
@@ -560,6 +1074,21 @@ export default function SettingsScreen() {
       fontFamily: "Inter_400Regular",
       color: colors.mutedForeground,
     },
+    snapshotRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      gap: 8,
+    },
+    snapshotAction: {
+      width: 34,
+      height: 34,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 17,
+      backgroundColor: colors.surface,
+    },
     label: {
       fontSize: 13,
       fontFamily: "Inter_500Medium",
@@ -589,6 +1118,83 @@ export default function SettingsScreen() {
       fontSize: 15,
       fontFamily: "Inter_600SemiBold",
       color: colors.primaryForeground,
+    },
+    collapsibleHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      marginBottom: 12,
+    },
+    tagCloud: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+    },
+    addTagRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 8,
+      marginBottom: 12,
+    },
+    addTagInput: {
+      flex: 1,
+      minHeight: 38,
+      paddingHorizontal: 12,
+      borderRadius: colors.radius,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.card,
+      color: colors.foreground,
+      fontSize: 14,
+      fontFamily: "Inter_400Regular",
+    },
+    addTagButton: {
+      minHeight: 38,
+      paddingHorizontal: 12,
+      borderRadius: colors.radius,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.primary,
+    },
+    addTagButtonText: {
+      color: colors.primaryForeground,
+      fontSize: 13,
+      fontFamily: "Inter_600SemiBold",
+    },
+    tagPill: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 14,
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    tagPillText: {
+      fontSize: 13,
+      fontFamily: "Inter_500Medium",
+      color: colors.foreground,
+    },
+    snapshotTestActions: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 8,
+      marginTop: 6,
+    },
+    snapshotTestButton: {
+      minHeight: 36,
+      paddingHorizontal: 11,
+      borderRadius: colors.radius,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.primary,
+    },
+    snapshotTestButtonText: {
+      color: colors.primaryForeground,
+      fontSize: 12,
+      fontFamily: "Inter_600SemiBold",
     },
     infoBox: {
       backgroundColor: colors.surface,
@@ -671,6 +1277,54 @@ export default function SettingsScreen() {
       backgroundColor: "rgba(0,0,0,0.45)",
       justifyContent: "flex-end",
     },
+    progressOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.6)",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 28,
+    },
+    progressCard: {
+      width: "100%",
+      maxWidth: 360,
+      borderRadius: 18,
+      padding: 24,
+      alignItems: "center",
+      gap: 12,
+      backgroundColor: colors.card,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    progressTitle: {
+      fontSize: 18,
+      fontFamily: "Inter_600SemiBold",
+      color: colors.foreground,
+      textAlign: "center",
+    },
+    progressLabel: {
+      fontSize: 14,
+      fontFamily: "Inter_400Regular",
+      color: colors.mutedForeground,
+      textAlign: "center",
+    },
+    progressTrack: {
+      width: "100%",
+      height: 8,
+      borderRadius: 4,
+      overflow: "hidden",
+      backgroundColor: colors.border,
+    },
+    progressFill: {
+      height: "100%",
+      borderRadius: 4,
+      backgroundColor: colors.primary,
+    },
+    progressHint: {
+      fontSize: 12,
+      fontFamily: "Inter_400Regular",
+      color: colors.mutedForeground,
+      textAlign: "center",
+    },
     modalSheet: {
       backgroundColor: colors.background,
       borderTopLeftRadius: 20,
@@ -725,6 +1379,106 @@ export default function SettingsScreen() {
 
   return (
     <View style={s.container}>
+      <Modal
+        visible={completeBackupBusy}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => {}}
+      >
+        <View
+          style={s.progressOverlay}
+          accessibilityRole="progressbar"
+          accessibilityLabel={
+            completeBackupOperation === "restore"
+              ? "Complete restore in progress"
+              : "Complete backup in progress"
+          }
+        >
+          <View style={s.progressCard}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={s.progressTitle}>
+              {completeBackupOperation === "restore"
+                ? "Restoring complete backup"
+                : "Creating complete backup"}
+            </Text>
+            <Text style={s.progressLabel}>
+              {completeBackupProgress?.label ?? "Preparing…"}
+              {completeBackupProgress && completeBackupProgress.total > 0
+                ? `  ${completeBackupProgress.current}/${completeBackupProgress.total}`
+                : ""}
+            </Text>
+            {completeBackupProgress && completeBackupProgress.total > 0 && (
+              <View style={s.progressTrack}>
+                <View
+                  style={[
+                    s.progressFill,
+                    {
+                      width: `${Math.min(
+                        100,
+                        Math.max(
+                          0,
+                          (completeBackupProgress.current / completeBackupProgress.total) * 100,
+                        ),
+                      )}%`,
+                    },
+                  ]}
+                />
+              </View>
+            )}
+            <Text style={s.progressHint}>
+              Keep Memory Records open until this finishes.
+            </Text>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={snapshotRestoreProgress !== null}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={() => {}}
+      >
+        <View
+          style={s.progressOverlay}
+          accessibilityRole="progressbar"
+          accessibilityLabel="Local snapshot restore in progress"
+        >
+          <View style={s.progressCard}>
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text style={s.progressTitle}>Restoring local snapshot</Text>
+            <Text style={s.progressLabel}>
+              {snapshotRestoreProgress?.stage ?? "Preparing…"}
+              {snapshotRestoreProgress && snapshotRestoreProgress.total > 0
+                ? `  ${snapshotRestoreProgress.current}/${snapshotRestoreProgress.total}`
+                : ""}
+            </Text>
+            {snapshotRestoreProgress && snapshotRestoreProgress.total > 0 && (
+              <View style={s.progressTrack}>
+                <View
+                  style={[
+                    s.progressFill,
+                    {
+                      width: `${Math.min(
+                        100,
+                        Math.max(
+                          0,
+                          (snapshotRestoreProgress.current / snapshotRestoreProgress.total) * 100,
+                        ),
+                      )}%`,
+                    },
+                  ]}
+                />
+              </View>
+            )}
+            <Text style={s.progressHint}>
+              Keep Memory Records open until the restore finishes.
+            </Text>
+          </View>
+        </View>
+      </Modal>
+
       {/* Import Modal */}
       <Modal
         visible={importModalVisible}
@@ -853,18 +1607,167 @@ export default function SettingsScreen() {
 
         {/* Tags */}
         <View style={s.section}>
-          <Text style={s.sectionTitle}>Tags</Text>
-          {knownTags.length === 0 ? (
+          <Pressable
+            style={s.collapsibleHeader}
+            onPress={() => setTagsCollapsed((v) => !v)}
+            hitSlop={6}
+          >
+            <Text style={s.sectionTitle}>Tags{knownTags.length > 0 ? ` (${knownTags.length})` : ""}</Text>
+            <Feather
+              name={tagsCollapsed ? "chevron-down" : "chevron-up"}
+              size={14}
+              color={colors.mutedForeground}
+            />
+          </Pressable>
+          {!tagsCollapsed && (
+            <>
+              <View style={s.addTagRow}>
+                <TextInput
+                  style={s.addTagInput}
+                  value={newTagDraft}
+                  onChangeText={setNewTagDraft}
+                  placeholder="new tag"
+                  placeholderTextColor={colors.mutedForeground}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  returnKeyType="done"
+                  onSubmitEditing={handleAddTag}
+                  maxLength={30}
+                />
+                <Pressable style={s.addTagButton} onPress={handleAddTag}>
+                  <Text style={s.addTagButtonText}>Add</Text>
+                </Pressable>
+              </View>
+              {knownTags.length === 0 ? (
+                <View style={s.infoBox}>
+                  <Text style={s.infoText}>No tags yet. Add your first tag above.</Text>
+                </View>
+              ) : (
+                <View style={s.tagCloud}>
+                  {knownTags.map((tag) => (
+                    <View key={tag} style={s.tagPill}>
+                      <Text style={s.tagPillText}>#{tag}</Text>
+                      <Pressable onPress={() => handleDeleteTag(tag)} hitSlop={8}>
+                        <Feather name="x" size={12} color={colors.mutedForeground} />
+                      </Pressable>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </>
+          )}
+        </View>
+
+        {/* Verified local snapshots */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Local Snapshot History</Text>
+          {isSnapshotTestBuild ? (
+            <View style={[s.infoBox, { borderWidth: 1, borderColor: colors.primary }]}>
+              <Text style={s.infoTitle}>Snapshot test build</Text>
+              <Text style={s.infoText}>
+                Simulated date: {new Date(settings.snapshotTestDate ?? Date.now()).toLocaleString()}{"\n"}
+                Snapshot logic v{SNAPSHOT_CHANGE_LOGIC_VERSION} — date changes ignored{"\n"}
+                Retention cleanup: {snapshotStatus
+                  ? snapshotStatus.cleanupBlocked
+                    ? "BLOCKED — incomplete inventory was detected; no snapshots will be deleted"
+                    : "active"
+                  : "checking…"}
+              </Text>
+              <View style={s.snapshotTestActions}>
+                <Pressable style={s.snapshotTestButton} onPress={() => advanceSnapshotTestDate(1)}>
+                  <Text style={s.snapshotTestButtonText}>Advance 1 day</Text>
+                </Pressable>
+                <Pressable style={s.snapshotTestButton} onPress={() => advanceSnapshotTestDate(7)}>
+                  <Text style={s.snapshotTestButtonText}>Advance 7 days</Text>
+                </Pressable>
+                <Pressable
+                  style={s.snapshotTestButton}
+                  onPress={() => updateSettings({ snapshotTestDate: undefined })}
+                >
+                  <Text style={s.snapshotTestButtonText}>Use real time</Text>
+                </Pressable>
+                <Pressable
+                  style={[s.snapshotTestButton, { backgroundColor: colors.destructive }]}
+                  onPress={handleResetSnapshotTestHistory}
+                  disabled={snapshotBusy}
+                >
+                  <Text style={s.snapshotTestButtonText}>Reset snapshot history</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
+          <View style={s.infoBox}>
+            <Text style={s.infoTitle}>Balanced device-only protection</Text>
+            <Text style={s.infoText}>
+              Automatic snapshots run at most once per local calendar day, only after records, tags, or settings change. Retention keeps 7 daily, 4 weekly, and 3 monthly restore points. Snapshots stay on this device; media is deduplicated in a verified local vault.
+            </Text>
+          </View>
+          <View style={[s.card, { marginTop: 10 }]}>
+            <Pressable
+              style={[s.row, s.rowBorder]}
+              onPress={() => updateSettings({ automaticSnapshotsEnabled: !settings.automaticSnapshotsEnabled })}
+              disabled={snapshotBusy}
+            >
+              <Feather
+                name={settings.automaticSnapshotsEnabled ? "check-circle" : "circle"}
+                size={18}
+                color={settings.automaticSnapshotsEnabled ? colors.success : colors.mutedForeground}
+              />
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={s.rowLabel}>Automatic snapshots</Text>
+                <Text style={[s.rowValue, { fontSize: 12 }]}>
+                  {settings.automaticSnapshotsEnabled ? "Enabled after the app becomes idle in the foreground" : "Disabled"}
+                </Text>
+              </View>
+            </Pressable>
+            <View style={s.row}>
+              <Feather name="shield" size={17} color={colors.primary} />
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={s.rowLabel}>Last successful snapshot</Text>
+                <Text style={[s.rowValue, { fontSize: 12 }]}>
+                  {snapshotStatus?.lastSuccessAt
+                    ? new Date(snapshotStatus.lastSuccessAt).toLocaleString()
+                    : snapshotStatus
+                      ? "No verified snapshot yet"
+                      : "Checking snapshot status…"}
+                </Text>
+                {snapshotStatus?.lastError ? (
+                  <Text style={[s.rowValue, { fontSize: 11, color: colors.destructive }]}>
+                    Last attempt failed: {snapshotStatus.lastError}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+          </View>
+          <View style={{ height: 10 }} />
+          {localSnapshots.length === 0 ? (
             <View style={s.infoBox}>
-              <Text style={s.infoText}>No tags yet. Add tags when creating a new record.</Text>
+              <Text style={s.infoText}>No retained snapshots yet. Keep the app open briefly after creating or editing a memory.</Text>
             </View>
           ) : (
             <View style={s.card}>
-              {knownTags.map((tag, i) => (
-                <View key={tag} style={[s.row, i < knownTags.length - 1 && s.rowBorder]}>
-                  <Feather name="tag" size={16} color={colors.primary} />
-                  <Text style={s.rowLabel}>#{tag}</Text>
-                  <Pressable onPress={() => handleDeleteTag(tag)} hitSlop={10}>
+              {localSnapshots.map((snapshot, index) => (
+                <View key={snapshot.id} style={[s.snapshotRow, index < localSnapshots.length - 1 && s.rowBorder]}>
+                  <View style={{ flex: 1, gap: 3 }}>
+                    <Text style={s.rowLabel}>{new Date(snapshot.createdAt).toLocaleString()}</Text>
+                    <Text style={[s.rowValue, { fontSize: 12 }]}>
+                      {snapshot.status === "verified" ? "Verified" : "Invalid"} · {snapshot.recordCount} records · {snapshot.mediaCount} media
+                    </Text>
+                  </View>
+                  <Pressable
+                    style={s.snapshotAction}
+                    onPress={() => handleRestoreLocalSnapshot(snapshot)}
+                    disabled={snapshotBusy || snapshot.status !== "verified"}
+                    accessibilityLabel="Restore local snapshot"
+                  >
+                    <Feather name="rotate-ccw" size={16} color={snapshot.status === "verified" ? colors.primary : colors.mutedForeground} />
+                  </Pressable>
+                  <Pressable
+                    style={s.snapshotAction}
+                    onPress={() => handleDeleteLocalSnapshot(snapshot)}
+                    disabled={snapshotBusy}
+                    accessibilityLabel="Delete local snapshot"
+                  >
                     <Feather name="trash-2" size={16} color={colors.destructive} />
                   </Pressable>
                 </View>
@@ -939,37 +1842,6 @@ export default function SettingsScreen() {
               {saving ? "Saving..." : "Save Settings"}
             </Text>
           </Pressable>
-          {settings.configured && (
-            <>
-              <View style={{ height: 10 }} />
-              <Pressable
-                style={[
-                  s.saveBtn,
-                  {
-                    backgroundColor: colors.card,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                    flexDirection: "row",
-                    justifyContent: "center",
-                    alignItems: "center",
-                    gap: 8,
-                    opacity: exportingToObsidian ? 0.6 : 1,
-                  },
-                ]}
-                onPress={handleExportAllToObsidian}
-                disabled={exportingToObsidian}
-              >
-                <Feather name="upload" size={15} color={colors.foreground} />
-                <Text style={[s.saveBtnText, { color: colors.foreground }]}>
-                  {exportingToObsidian
-                    ? exportProgress && exportProgress.current > 0
-                      ? `Writing ${exportProgress.current} / ${exportProgress.total}…`
-                      : "Preparing…"
-                    : `Export all ${records.length} note${records.length !== 1 ? "s" : ""} to Obsidian`}
-                </Text>
-              </Pressable>
-            </>
-          )}
         </View>
 
         {/* AI Features Unlock */}
@@ -1171,9 +2043,64 @@ export default function SettingsScreen() {
         {/* Backup */}
         <View style={s.section}>
           <Text style={s.sectionTitle}>Backup & Restore</Text>
+          {completeBackupReminder?.due && (
+            <View
+              style={{
+                backgroundColor: colors.card,
+                borderWidth: 1,
+                borderColor: colors.primary,
+                borderRadius: colors.radius,
+                padding: 14,
+                gap: 10,
+                marginBottom: 12,
+              }}
+            >
+              <View style={{ flexDirection: "row", gap: 10, alignItems: "flex-start" }}>
+                <Feather name="alert-triangle" size={19} color={colors.primary} />
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Text style={s.rowLabel}>Complete backup recommended</Text>
+                  <Text style={s.rowValue}>
+                    {completeBackupReminder.reason === "never-backed-up"
+                      ? "Your memories and attached media have not yet been saved in a portable complete backup."
+                      : completeBackupReminder.reason === "restore"
+                        ? "Your data was restored or recovered. Create a fresh complete backup of the current library."
+                        : completeBackupReminder.reason === "changes"
+                          ? `${completeBackupReminder.changedRecordCount} memories have been created or edited since your last complete backup.`
+                          : `Your last complete backup was ${completeBackupReminder.lastSuccessfulBackupAt
+                            ? new Date(completeBackupReminder.lastSuccessfulBackupAt).toLocaleDateString()
+                            : "more than 30 days ago"}.`}
+                  </Text>
+                </View>
+              </View>
+              <View style={{ flexDirection: "row", gap: 10 }}>
+                <Pressable
+                  style={[s.modalBtn, { backgroundColor: colors.primary }]}
+                  onPress={handleCreateCompleteBackup}
+                  disabled={completeBackupBusy}
+                >
+                  <Text style={[s.modalBtnText, { color: colors.primaryForeground }]}>
+                    Create Backup
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[s.modalBtn, { backgroundColor: colors.muted }]}
+                  onPress={() => {
+                    snoozeCompleteBackupReminder()
+                      .then(refreshCompleteBackupReminder)
+                      .catch(() => {});
+                  }}
+                >
+                  <Text style={[s.modalBtnText, { color: colors.foreground }]}>
+                    Remind Me Later
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          )}
           <View style={s.infoBox}>
             <Text style={s.infoText}>
-              Export saves all your records and tags as a JSON file you can store anywhere. Import merges a backup back in without deleting existing records.{"\n\n"}
+              <Text style={{ fontFamily: "Inter_600SemiBold" }}>Complete backup</Text> creates one portable Android archive containing records, settings, photos, videos, thumbnails, and voice memos.{"\n\n"}
+              <Text style={{ fontFamily: "Inter_600SemiBold" }}>JSON backup</Text> remains available as a small, portable records-and-tags backup, but it does not contain media files. Import merges a backup without deleting unrelated records.{"\n\n"}
               <Text style={{ fontFamily: "Inter_600SemiBold" }}>Import from Obsidian</Text> opens a file picker — navigate to your Obsidian vault folder and select one or more .md files.{"\n"}
               • Android / Samsung: tap the{" "}
               <Text style={{ fontFamily: "Inter_600SemiBold" }}>☰ menu → Internal storage</Text>, then find{" "}
@@ -1183,9 +2110,51 @@ export default function SettingsScreen() {
             </Text>
           </View>
           <View style={s.card}>
+            <Pressable
+              style={[s.row, s.rowBorder, completeBackupBusy && { opacity: 0.55 }]}
+              onPress={handleCreateCompleteBackup}
+              disabled={completeBackupBusy}
+            >
+              <Feather name="archive" size={18} color={colors.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.rowLabel}>
+                  {completeBackupProgress
+                    ? `${completeBackupProgress.label} ${completeBackupProgress.current}/${completeBackupProgress.total}`
+                    : "Create complete backup"}
+                </Text>
+                <Text style={s.rowValue}>Records, settings, and all accessible media</Text>
+              </View>
+              <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+            </Pressable>
+            <Pressable
+              style={[s.row, s.rowBorder, completeBackupBusy && { opacity: 0.55 }]}
+              onPress={handleRestoreCompleteBackup}
+              disabled={completeBackupBusy}
+            >
+              <Feather name="folder-plus" size={18} color={colors.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.rowLabel}>Restore complete backup</Text>
+                <Text style={s.rowValue}>Select a .mrbak archive</Text>
+              </View>
+              <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+            </Pressable>
+            <Pressable
+              style={[s.row, s.rowBorder, recoveringPreviousData && { opacity: 0.55 }]}
+              onPress={handlePreviousDataRecovery}
+              disabled={recoveringPreviousData}
+            >
+              <Feather name="rotate-ccw" size={18} color={colors.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.rowLabel}>
+                  {recoveringPreviousData ? "Scanning previous app data…" : "Recover previous Expo Go data"}
+                </Text>
+                <Text style={s.rowValue}>One-time recovery after an SDK or project update</Text>
+              </View>
+              <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+            </Pressable>
             <Pressable style={[s.row, s.rowBorder]} onPress={handleExport}>
               <Feather name="upload" size={18} color={colors.primary} />
-              <Text style={s.rowLabel}>Export all records</Text>
+              <Text style={s.rowLabel}>Export JSON backup</Text>
               <Text style={s.rowValue}>{records.length} record{records.length !== 1 ? "s" : ""}</Text>
             </Pressable>
             <Pressable style={[s.row, s.rowBorder]} onPress={() => { setImportText(""); setImportModalVisible(true); }}>
@@ -1193,12 +2162,67 @@ export default function SettingsScreen() {
               <Text style={s.rowLabel}>Import from JSON backup</Text>
               <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
             </Pressable>
+            {settings.configured && (
+              <Pressable
+                style={[s.row, s.rowBorder, exportingToObsidian && { opacity: 0.55 }]}
+                onPress={handleExportAllToObsidian}
+                disabled={exportingToObsidian}
+              >
+                <Feather name="upload" size={18} color={colors.primary} />
+                <Text style={s.rowLabel}>
+                  {exportingToObsidian
+                    ? exportProgress && exportProgress.current > 0
+                      ? `Writing ${exportProgress.current} / ${exportProgress.total}…`
+                      : "Preparing…"
+                    : `Export all ${records.length} note${records.length !== 1 ? "s" : ""} to Obsidian`}
+                </Text>
+                <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+              </Pressable>
+            )}
             <Pressable style={s.row} onPress={handleObsidianImport}>
               <Feather name="file-text" size={18} color={colors.primary} />
               <Text style={s.rowLabel}>Import from Obsidian notes</Text>
               <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
             </Pressable>
           </View>
+        </View>
+
+        {/* Storage */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>Storage</Text>
+          <View style={s.card}>
+            <View style={[s.row, s.rowBorder]}>
+              <Feather name="video" size={18} color={colors.primary} />
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={s.rowLabel}>Saved videos</Text>
+                <Text style={[s.rowValue, { fontSize: 12 }]}>
+                  {videoStorage === null
+                    ? "Calculating…"
+                    : videoStorage.fileCount === 0
+                    ? "No videos saved"
+                    : `${videoStorage.fileCount} file${videoStorage.fileCount !== 1 ? "s" : ""}`}
+                </Text>
+              </View>
+              <Text style={[s.rowValue, { fontFamily: "Inter_600SemiBold", color: colors.foreground }]}>
+                {videoStorage === null ? "—" : formatBytes(videoStorage.bytes)}
+              </Text>
+            </View>
+            <View style={s.row}>
+              <Feather name="hard-drive" size={18} color={colors.mutedForeground} />
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={[s.rowLabel, { color: colors.mutedForeground }]}>Total records</Text>
+                <Text style={[s.rowValue, { fontSize: 12 }]}>Stored in app documents folder</Text>
+              </View>
+              <Text style={s.rowValue}>{records.length}</Text>
+            </View>
+          </View>
+          {videoStorage !== null && videoStorage.bytes > 0 && (
+            <View style={[s.infoBox, { marginTop: 10 }]}>
+              <Text style={s.infoText}>
+                Videos are saved privately in the app's documents folder. Delete individual records to free up space.
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* About */}

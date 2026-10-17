@@ -12,6 +12,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -20,6 +21,7 @@ import { EMOTIONS, getEmotion } from "@/constants/emotions";
 import { MemoryRecord, useRecords } from "@/context/RecordsContext";
 import { useColors } from "@/hooks/useColors";
 import { computeStreak } from "@/utils/streak";
+import { copyImageToAppStorage } from "@/utils/storage";
 
 const UNTAGGED_KEY = "__untagged__";
 const SORT_KEY = "mr_sort_mode";
@@ -51,6 +53,7 @@ export default function HomeScreen() {
   const [refreshing] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [sortMode, setSortMode] = useState<SortMode>("tag");
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     AsyncStorage.getItem(SORT_KEY).then((v) => {
@@ -86,7 +89,11 @@ export default function HomeScreen() {
     });
     if (result.canceled || !result.assets?.[0]) return;
     if (Platform.OS !== "web") await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    await updateRecord(record.id, { imageUri: result.assets[0].uri });
+    const asset = result.assets[0];
+    const extension = (asset.fileName?.split(".").pop() ?? asset.uri.split(".").pop() ?? "jpg")
+      .split("?")[0];
+    const durableImageUri = await copyImageToAppStorage(asset.uri, extension);
+    await updateRecord(record.id, { imageUri: durableImageUri });
   };
 
   const handleNewRecord = async () => {
@@ -118,10 +125,22 @@ export default function HomeScreen() {
 
   const streak = useMemo(() => computeStreak(records), [records]);
 
+  const filteredRecords = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return records;
+    return records.filter((r) => {
+      if (r.note.toLowerCase().includes(q)) return true;
+      if (r.tags?.some((t) => t.toLowerCase().includes(q))) return true;
+      if (r.emotion && getEmotion(r.emotion).label.toLowerCase().includes(q)) return true;
+      if (r.location?.toLowerCase().includes(q)) return true;
+      return false;
+    });
+  }, [records, searchQuery]);
+
   const groups = useMemo<[string, MemoryRecord[], string?][]>(() => {
     if (sortMode === "tag") {
       const map = new Map<string, MemoryRecord[]>();
-      for (const record of records) {
+      for (const record of filteredRecords) {
         const key = record.tags?.[0] ?? UNTAGGED_KEY;
         if (!map.has(key)) map.set(key, []);
         map.get(key)!.push(record);
@@ -137,7 +156,7 @@ export default function HomeScreen() {
 
     if (sortMode === "emotion") {
       const map = new Map<string, MemoryRecord[]>();
-      for (const record of records) {
+      for (const record of filteredRecords) {
         const key = record.emotion ?? "neutral";
         if (!map.has(key)) map.set(key, []);
         map.get(key)!.push(record);
@@ -154,17 +173,17 @@ export default function HomeScreen() {
     }
 
     return [];
-  }, [records, sortMode]);
+  }, [filteredRecords, sortMode]);
 
   const listData = useMemo<ListItem[]>(() => {
     if (sortMode === "input-date") {
-      return [...records]
+      return [...filteredRecords]
         .sort((a, b) => b.createdAt - a.createdAt)
         .map((record) => ({ type: "record" as const, record }));
     }
 
     if (sortMode === "note-date") {
-      const sorted = [...records].sort((a, b) => {
+      const sorted = [...filteredRecords].sort((a, b) => {
         const yA = a.contextYear ?? -Infinity;
         const yB = b.contextYear ?? -Infinity;
         if (yB !== yA) return yB - yA;
@@ -216,14 +235,15 @@ export default function HomeScreen() {
         label = getEmotion(key).label;
       }
       items.push({ type: "header", label, count: recs.length, emotionColor: color });
-      if (!collapsedGroups.has(label)) {
+      // Always expand groups while a search query is active so matched records are visible.
+      if (!collapsedGroups.has(label) || searchQuery.trim()) {
         for (const record of recs) {
           items.push({ type: "record", record });
         }
       }
     }
     return items;
-  }, [groups, collapsedGroups, sortMode, records]);
+  }, [groups, collapsedGroups, sortMode, filteredRecords]);
 
   const s = StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
@@ -394,6 +414,44 @@ export default function HomeScreen() {
       fontFamily: "Inter_600SemiBold",
       color: colors.primary,
     },
+    searchBar: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginHorizontal: 16,
+      marginTop: 12,
+      marginBottom: 4,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: colors.radius,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+      gap: 8,
+    },
+    searchInput: {
+      flex: 1,
+      fontSize: 14,
+      fontFamily: "Inter_400Regular",
+      color: colors.foreground,
+      padding: 0,
+    },
+    searchNoResults: {
+      alignItems: "center",
+      paddingTop: 60,
+      gap: 8,
+    },
+    searchNoResultsTitle: {
+      fontSize: 16,
+      fontFamily: "Inter_600SemiBold",
+      color: colors.foreground,
+    },
+    searchNoResultsSubtitle: {
+      fontSize: 14,
+      fontFamily: "Inter_400Regular",
+      color: colors.mutedForeground,
+      textAlign: "center",
+      paddingHorizontal: 40,
+    },
   });
 
   const isGrouped = sortMode === "tag" || sortMode === "emotion";
@@ -411,11 +469,11 @@ export default function HomeScreen() {
           )}
         </View>
         <View style={s.headerRight}>
-          <Pressable style={s.helpBtn} onPress={handleHelp} accessibilityLabel="Help & Features Guide">
-            <Feather name="help-circle" size={18} color={colors.mutedForeground} />
-          </Pressable>
           <Pressable style={s.addBtn} onPress={handleNewRecord} testID="add-record-btn">
             <Feather name="plus" size={22} color="#fff" />
+          </Pressable>
+          <Pressable style={s.helpBtn} onPress={handleHelp} accessibilityLabel="Help & Features Guide">
+            <Feather name="help-circle" size={18} color={colors.mutedForeground} />
           </Pressable>
         </View>
       </View>
@@ -453,29 +511,62 @@ export default function HomeScreen() {
           s.listContent,
           records.length === 0 && { flex: 1 },
         ]}
-        scrollEnabled={records.length > 0}
+        scrollEnabled={listData.length > 0 || records.length === 0}
         refreshing={refreshing}
         ListHeaderComponent={
-          records.length > 0 ? (
-            <Text style={s.count}>
-              {records.length} {records.length === 1 ? "record" : "records"}
-              {isGrouped && groups.length > 0
-                ? `  ·  ${groups.length} ${groups.length === 1 ? "group" : "groups"}`
-                : null}
-            </Text>
-          ) : null
+          <>
+            {/* Search bar — scrolls with the list */}
+            <View style={s.searchBar}>
+              <Feather name="search" size={16} color={colors.mutedForeground} />
+              <TextInput
+                style={s.searchInput}
+                placeholder="Search memories…"
+                placeholderTextColor={colors.mutedForeground}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                returnKeyType="search"
+                clearButtonMode="while-editing"
+                autoCorrect={false}
+              />
+              {searchQuery.length > 0 && (
+                <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
+                  <Feather name="x" size={16} color={colors.mutedForeground} />
+                </Pressable>
+              )}
+            </View>
+            {filteredRecords.length > 0 && (
+              <Text style={s.count}>
+                {searchQuery.trim()
+                  ? `${filteredRecords.length} of ${records.length} ${records.length === 1 ? "record" : "records"}`
+                  : `${records.length} ${records.length === 1 ? "record" : "records"}`}
+                {!searchQuery.trim() && isGrouped && groups.length > 0
+                  ? `  ·  ${groups.length} ${groups.length === 1 ? "group" : "groups"}`
+                  : null}
+              </Text>
+            )}
+          </>
         }
         ListEmptyComponent={
           !isLoading ? (
-            <View style={s.emptyContainer}>
-              <View style={s.emptyIcon}>
-                <Feather name="camera" size={30} color={colors.mutedForeground} />
+            searchQuery.trim() ? (
+              <View style={s.searchNoResults}>
+                <Feather name="search" size={32} color={colors.mutedForeground} />
+                <Text style={s.searchNoResultsTitle}>No matches</Text>
+                <Text style={s.searchNoResultsSubtitle}>
+                  No memories found for "{searchQuery.trim()}". Try a different keyword.
+                </Text>
               </View>
-              <Text style={s.emptyTitle}>No memories yet</Text>
-              <Text style={s.emptySubtitle}>
-                Tap the + button to add your first photo memory with a note.
-              </Text>
-            </View>
+            ) : (
+              <View style={s.emptyContainer}>
+                <View style={s.emptyIcon}>
+                  <Feather name="camera" size={30} color={colors.mutedForeground} />
+                </View>
+                <Text style={s.emptyTitle}>No memories yet</Text>
+                <Text style={s.emptySubtitle}>
+                  Tap the + button to add your first photo memory with a note.
+                </Text>
+              </View>
+            )
           ) : null
         }
         renderItem={({ item }) => {
@@ -489,7 +580,7 @@ export default function HomeScreen() {
                   <View style={{ width: 14, height: 14, borderRadius: 7, backgroundColor: dotColor }} />
                 ) : (
                   <Feather
-                    name={isCollapsed ? "folder" : "folder-open" as any}
+                    name="folder"
                     size={16}
                     color={item.label === "Untagged" ? colors.mutedForeground : colors.primary}
                   />

@@ -16,6 +16,7 @@ import { useColors } from "@/hooks/useColors";
 const BMAC_URL   = "https://buymeacoffee.com/marcsebastien";
 const PAYPAL_URL = "https://www.paypal.com/donate/?business=7AUYVWJE39NMQ&no_recurring=0&item_name=Building+open+source+apps+that+are+secure%2C+practical%2C+and+keep+your+data+local%E2%80%94not+in+the+cloud.&currency_code=EUR";
 const GITHUB_URL = "https://github.com/Marcseb/Memory-records";
+const GPL_URL = "https://www.gnu.org/licenses/gpl-3.0.html";
 
 interface SectionProps {
   icon: keyof typeof Feather.glyphMap;
@@ -169,6 +170,24 @@ export default function HelpScreen() {
       lineHeight: 18,
       marginTop: 8,
     },
+    licenseLink: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 12,
+      backgroundColor: colors.surface,
+      borderRadius: colors.radius,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingVertical: 13,
+      paddingHorizontal: 14,
+      marginTop: 10,
+    },
+    licenseLinkText: {
+      flex: 1,
+      fontSize: 14,
+      fontFamily: "Inter_600SemiBold",
+      color: colors.foreground,
+    },
   });
 
   return (
@@ -256,7 +275,7 @@ export default function HelpScreen() {
             Tap <Text style={s.strong}>Contribute €5 via PayPal</Text>. A pre-filled PayPal form opens in your browser. In the PayPal message field, include your device ID so the payment can be matched automatically.
           </Bullet>
           <Bullet>
-            After completing the payment, return to the app and tap <Text style={s.strong}>I've paid — check payment status</Text>. The app queries the server and, if your payment is confirmed, unlocks the AI Interviewer, Historical Events, and Video Attachments immediately.
+            After completing the payment, return to the app and tap <Text style={s.strong}>I've paid — check payment status</Text>. Enter the email address used for PayPal. The app matches the completed payment and unlocks the AI Interviewer, Historical Events, and Video Attachments immediately.
           </Bullet>
           <Bullet>
             <Text style={s.strong}>Activation code alternative</Text> — send your device ID to the developer (contact via GitHub). Once your payment is verified manually, you'll receive a code in the format <Text style={s.strong}>MR-XXXXXXXX</Text>. Tap <Text style={s.strong}>I have an activation code</Text>, enter it, and tap <Text style={s.strong}>Activate</Text>.
@@ -266,7 +285,7 @@ export default function HelpScreen() {
           </Bullet>
           <View style={{ height: 10 }} />
           <InfoBox>
-            Only the device token and payment timestamp are stored server-side — no personal data, no email, no name.
+            Only the device token, payment timestamp, and a SHA-256 hash of the PayPal email are stored server-side. The email address itself and your name are not stored.
           </InfoBox>
         </Section>
 
@@ -359,6 +378,21 @@ export default function HelpScreen() {
 
         <Section icon="archive" title="Backup & restore">
           <Bullet>
+            <Text style={s.strong}>Automatic local snapshots</Text> — when enabled in Settings, the app opportunistically creates at most one verified snapshot per local calendar day after records, tags, or settings change. It keeps a balanced set of 7 daily, 4 weekly, and 3 monthly restore points entirely on this device.
+          </Bullet>
+          <Bullet>
+            Snapshot media is stored in a content-addressed local vault with bounded streaming reads and checksum verification. A failed media read never creates a partial usable snapshot; video thumbnails are optional.
+          </Bullet>
+          <Bullet>
+            Open <Text style={s.strong}>Settings → Local Snapshot History</Text> to review counts and status, restore a verified point (matching IDs are replaced while unrelated records remain), or delete an older point. The newest verified point is protected.
+          </Bullet>
+          <Bullet>
+            <Text style={s.strong}>Complete backup (Android)</Text> — creates one dated .mrbak archive containing records, tags, app settings, and every accessible photo, video, thumbnail, and voice memo. Media is processed in bounded chunks and every entry includes integrity data.
+          </Bullet>
+          <Bullet>
+            <Text style={s.strong}>Complete restore (Android)</Text> — select a .mrbak archive. The app validates it, restores and verifies media in a staging directory, restores settings, and merges records without deleting unrelated records.
+          </Bullet>
+          <Bullet>
             <Text style={s.strong}>JSON export</Text> — tap Export in Settings. On Android a folder picker opens so you can save directly to Documents, Downloads, or Google Drive. On iPhone the share sheet appears with "Save to Files". The file is named <Text style={s.strong}>memory-records-backup-YYYY-MM-DD.json</Text> and is human-readable. Photo, video, and voice memo references are saved as local file paths, not embedded media data.
           </Bullet>
           <Bullet>
@@ -366,7 +400,7 @@ export default function HelpScreen() {
           </Bullet>
           <View style={{ height: 10 }} />
           <InfoBox>
-            Regular JSON exports are the recommended backup strategy. Store them somewhere safe — if you uninstall the app or change device, a JSON backup lets you restore everything instantly.
+            Use complete backups to protect recordings and other media. Keep JSON exports as an additional lightweight, human-readable safeguard. Secure AI keys and payment or unlock credentials are deliberately excluded from both formats.
           </InfoBox>
         </Section>
 
@@ -386,6 +420,35 @@ export default function HelpScreen() {
           <Bullet>
             <Text style={s.strong}>AI calls are direct.</Text> When the AI Interviewer is active, your messages go directly from your device to Mistral or OpenAI using your own key — no intermediary server reads them.
           </Bullet>
+        </Section>
+
+        <Section icon="book-open" title="License & source">
+          <Bullet>
+            <Text style={s.strong}>GPL-3.0-only.</Text> Memory Records is licensed under version 3 of the GNU General Public License only. If you distribute the app or a modified version, GPLv3 requires you to provide the corresponding source under its terms.
+          </Bullet>
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel="Read the GNU General Public License version 3"
+            onPress={() => Linking.openURL(GPL_URL)}
+            style={({ pressed }) => [s.licenseLink, { opacity: pressed ? 0.7 : 1 }]}
+          >
+            <Feather name="file-text" size={18} color={colors.primary} />
+            <Text style={s.licenseLinkText}>Read the full GPL v3 license</Text>
+            <Feather name="external-link" size={16} color={colors.mutedForeground} />
+          </Pressable>
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel="View Memory Records source code on GitHub"
+            onPress={() => Linking.openURL(GITHUB_URL)}
+            style={({ pressed }) => [s.licenseLink, { opacity: pressed ? 0.7 : 1 }]}
+          >
+            <Feather name="github" size={18} color={colors.foreground} />
+            <Text style={s.licenseLinkText}>View the project source on GitHub</Text>
+            <Feather name="external-link" size={16} color={colors.mutedForeground} />
+          </Pressable>
+          <Text style={s.footerNote}>
+            Before sharing an APK, make sure the linked repository contains the source for that app version.
+          </Text>
         </Section>
 
         <View style={s.divider} />

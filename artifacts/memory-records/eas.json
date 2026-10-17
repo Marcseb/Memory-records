@@ -1,0 +1,18 @@
+{
+  "cli": {
+    "version": ">= 16.0.0"
+  },
+  "build": {
+    "snapshot-test": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "channel": "snapshot-test",
+      "env": {
+        "APP_VARIANT": "snapshot-test"
+      },
+      "android": {
+        "buildType": "apk"
+      }
+    }
+  }
+}

@@ -194,11 +194,13 @@ File names follow the format `YYYY-MM-DD[_tag][_year][_N].md` — the primary ta
 
 ## Backup & restore
 
+- **Complete backup (Android)** — creates one dated `.mrbak` archive containing records, tags, app settings, and every accessible photo, video, thumbnail, and voice memo. Media streams in bounded chunks and each entry carries size and integrity data.
+- **Complete restore (Android)** — select a `.mrbak` archive. The app strictly validates its manifest, restores and verifies media in a staging directory, then merges records without deleting unrelated records.
 - **JSON export** — tap Export in Settings. On **Android** a folder picker opens so you can save directly to Documents, Downloads, an SD card folder, or Google Drive. On **iOS** the share sheet appears with a "Save to Files" option. The file is named `memory-records-backup-YYYY-MM-DD.json` and contains all records and tags in a readable, pretty-printed format. Photo, video, and voice memo references are stored as local file paths (not embedded media data).
 - **JSON import** — in the Import panel, either tap **Pick JSON file** to select a backup file directly from your device, or paste the JSON text manually. Records are merged with existing ones; duplicates are avoided by ID.
 - **Import from Obsidian** — reimport previously saved Memory Records notes from your vault. On both Android and iOS, a file picker lets you navigate to your vault folder and select one or more `.md` files. Android users: in the picker, tap the **☰ menu → Internal storage**, then find `Obsidian → [vault] → Memory Records`.
 
-> Regular JSON exports are the recommended backup strategy. If you reinstall the app or change device, a JSON backup lets you restore everything instantly.
+> Use complete backups when you need to protect recordings and other media. Keep JSON exports as an additional lightweight, human-readable safeguard. Secure AI keys and payment/unlock credentials are deliberately excluded from both backup formats.
 
 ---
 
@@ -277,4 +279,5 @@ lib/                        ← Shared TypeScript libraries
 
 ## License
 
-MIT — feel free to fork, adapt, and build on this.
+Copyright (C) 2026 Marcseb. Licensed under the GNU General Public License
+v3.0 only. See [LICENSE](LICENSE).

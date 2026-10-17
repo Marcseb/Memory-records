@@ -44,12 +44,15 @@ export function UnlockModal({ visible, featureName, onClose, onUnlocked }: Props
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const { checkStatus, activateCode, isChecking } = useUnlock();
+  const { checkPayment, activateCode, isChecking } = useUnlock();
 
   const [codeInput, setCodeInput] = useState("");
   const [codeError, setCodeError] = useState<string | null>(null);
   const [codeActivating, setCodeActivating] = useState(false);
   const [checkingPayment, setCheckingPayment] = useState(false);
+  const [paymentEmail, setPaymentEmail] = useState("");
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+  const [paymentSectionOpen, setPaymentSectionOpen] = useState(false);
   const [codeSectionOpen, setCodeSectionOpen] = useState(false);
 
   const deviceToken = user?.token ?? "—";
@@ -61,13 +64,32 @@ export function UnlockModal({ visible, featureName, onClose, onUnlocked }: Props
   };
 
   const handleCheckPayment = async () => {
+    if (!paymentSectionOpen) {
+      setPaymentSectionOpen(true);
+      return;
+    }
+    const email = paymentEmail.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setPaymentError("Enter the email address used for PayPal");
+      return;
+    }
     if (Platform.OS !== "web") await Haptics.selectionAsync();
+    setPaymentError(null);
     setCheckingPayment(true);
-    await checkStatus();
+    const result = await checkPayment(email);
     setCheckingPayment(false);
-    // UnlockContext updated isAiUnlocked — if now true, close
-    // We can't read the updated value directly here; parent watches isAiUnlocked
-    // The parent's useEffect will close the modal when isAiUnlocked becomes true.
+    if (result.ok) {
+      if (Platform.OS !== "web") {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      onUnlocked?.();
+      onClose();
+    } else {
+      if (Platform.OS !== "web") {
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
+      setPaymentError(result.error ?? "Payment not found");
+    }
   };
 
   const handleActivateCode = async () => {
@@ -211,6 +233,20 @@ export function UnlockModal({ visible, featureName, onClose, onUnlocked }: Props
       fontFamily: "Inter_500Medium",
       color: colors.primary,
     },
+    paymentSection: {
+      gap: 8,
+    },
+    paymentInput: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: colors.radius,
+      paddingHorizontal: 14,
+      paddingVertical: 11,
+      fontSize: 15,
+      fontFamily: "Inter_400Regular",
+      color: colors.foreground,
+      backgroundColor: colors.card,
+    },
     divider: {
       flexDirection: "row",
       alignItems: "center",
@@ -327,20 +363,47 @@ export function UnlockModal({ visible, featureName, onClose, onUnlocked }: Props
           </Pressable>
 
           {/* Check payment status */}
-          <Pressable
-            style={[s.checkBtn, (isChecking || checkingPayment) && { opacity: 0.6 }]}
-            onPress={handleCheckPayment}
-            disabled={isChecking || checkingPayment}
-          >
-            {(isChecking || checkingPayment) ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : (
-              <Feather name="refresh-cw" size={14} color={colors.primary} />
+          <View style={s.paymentSection}>
+            {paymentSectionOpen && (
+              <>
+                <TextInput
+                  style={s.paymentInput}
+                  placeholder="PayPal email address"
+                  placeholderTextColor={colors.mutedForeground}
+                  value={paymentEmail}
+                  onChangeText={(value) => {
+                    setPaymentEmail(value);
+                    setPaymentError(null);
+                  }}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="email-address"
+                  textContentType="emailAddress"
+                  returnKeyType="done"
+                  onSubmitEditing={handleCheckPayment}
+                />
+                {paymentError && <Text style={s.codeError}>{paymentError}</Text>}
+              </>
             )}
-            <Text style={s.checkBtnText}>
-              {(isChecking || checkingPayment) ? "Checking…" : "I've paid — check payment status"}
-            </Text>
-          </Pressable>
+            <Pressable
+              style={[s.checkBtn, (isChecking || checkingPayment) && { opacity: 0.6 }]}
+              onPress={handleCheckPayment}
+              disabled={isChecking || checkingPayment}
+            >
+              {(isChecking || checkingPayment) ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <Feather name="refresh-cw" size={14} color={colors.primary} />
+              )}
+              <Text style={s.checkBtnText}>
+                {(isChecking || checkingPayment)
+                  ? "Checking…"
+                  : paymentSectionOpen
+                    ? "Check payment status"
+                    : "I've paid — check payment status"}
+              </Text>
+            </Pressable>
+          </View>
 
           {/* Divider */}
           <View style={s.divider}>

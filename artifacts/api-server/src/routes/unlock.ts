@@ -5,6 +5,11 @@ import crypto from "crypto";
 
 const router: Router = Router();
 
+router.use("/unlock", (_req, res, next) => {
+  res.set("Cache-Control", "no-store");
+  next();
+});
+
 /** Create tables on startup — safe to call every time (IF NOT EXISTS). */
 async function ensureTables() {
   await pool.query(`
@@ -19,6 +24,14 @@ async function ensureTables() {
       created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       used_at         TIMESTAMPTZ,
       used_by_device  TEXT
+    );
+    CREATE TABLE IF NOT EXISTS mr_unlock_payments (
+      paypal_txn_id       TEXT PRIMARY KEY,
+      payer_email_hash    TEXT,
+      gross               NUMERIC NOT NULL,
+      currency            TEXT NOT NULL,
+      received_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      claimed_device_token TEXT
     );
   `);
 }
@@ -82,6 +95,7 @@ router.post("/unlock/paypal-ipn", async (req, res) => {
     const currency = (body["mc_currency"] ?? "").toUpperCase();
     const deviceToken = (body["custom"] ?? "").trim();
     const txnId = body["txn_id"];
+    const payerEmail = (body["payer_email"] ?? "").trim().toLowerCase();
 
     if (paymentStatus !== "Completed") {
       logger.info({ paymentStatus }, "IPN received but payment not completed");
@@ -97,8 +111,26 @@ router.post("/unlock/paypal-ipn", async (req, res) => {
       return;
     }
 
+    if (!txnId) {
+      logger.warn("Eligible IPN has no transaction ID");
+      return;
+    }
+
+    const payerEmailHash = payerEmail
+      ? crypto.createHash("sha256").update(payerEmail).digest("hex")
+      : null;
+    await pool.query(
+      `INSERT INTO mr_unlock_payments
+         (paypal_txn_id, payer_email_hash, gross, currency, claimed_device_token)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (paypal_txn_id) DO UPDATE
+         SET payer_email_hash = COALESCE(mr_unlock_payments.payer_email_hash, EXCLUDED.payer_email_hash),
+             claimed_device_token = COALESCE(mr_unlock_payments.claimed_device_token, EXCLUDED.claimed_device_token)`,
+      [txnId, payerEmailHash, gross, currency, deviceToken || null],
+    );
+
     if (!deviceToken) {
-      logger.warn({ txnId }, "IPN has no device token in custom field");
+      logger.info({ txnId }, "Eligible PayPal payment stored for email matching");
       return;
     }
 
@@ -111,6 +143,63 @@ router.post("/unlock/paypal-ipn", async (req, res) => {
     logger.info({ deviceToken, txnId }, "Device unlocked via PayPal IPN ✓");
   } catch (err) {
     logger.error({ err }, "PayPal IPN processing failed");
+  }
+});
+
+// ── POST /api/unlock/payment-status — match a payment by PayPal email ──────
+router.post("/unlock/payment-status", async (req, res) => {
+  const { email, deviceToken } = req.body as {
+    email?: string;
+    deviceToken?: string;
+  };
+  const normalisedEmail = email?.trim().toLowerCase() ?? "";
+  if (!deviceToken?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalisedEmail)) {
+    return res.status(400).json({ error: "Enter the email address used for PayPal." });
+  }
+
+  const emailHash = crypto.createHash("sha256").update(normalisedEmail).digest("hex");
+  try {
+    const existingUnlock = await pool.query(
+      "SELECT 1 FROM mr_unlock_devices WHERE device_token = $1",
+      [deviceToken.trim()],
+    );
+    if (existingUnlock.rows.length > 0) {
+      return res.json({ unlocked: true });
+    }
+
+    const { rows } = await pool.query(
+      `UPDATE mr_unlock_payments
+          SET claimed_device_token = $1
+        WHERE paypal_txn_id = (
+          SELECT paypal_txn_id
+            FROM mr_unlock_payments
+           WHERE payer_email_hash = $2
+             AND (claimed_device_token IS NULL OR claimed_device_token = $1)
+           ORDER BY received_at DESC
+           LIMIT 1
+        )
+          AND (claimed_device_token IS NULL OR claimed_device_token = $1)
+      RETURNING paypal_txn_id`,
+      [deviceToken.trim(), emailHash],
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        unlocked: false,
+        error: "No completed €5 contribution was found for that PayPal email yet. PayPal confirmation can take a few minutes.",
+      });
+    }
+
+    await pool.query(
+      `INSERT INTO mr_unlock_devices (device_token, source, paypal_txn_id)
+       VALUES ($1, 'paypal_email_match', $2)
+       ON CONFLICT (device_token) DO NOTHING`,
+      [deviceToken.trim(), rows[0].paypal_txn_id],
+    );
+    return res.json({ unlocked: true });
+  } catch (err) {
+    logger.error({ err }, "unlock/payment-status error");
+    return res.status(500).json({ error: "Could not check the payment right now." });
   }
 });
 

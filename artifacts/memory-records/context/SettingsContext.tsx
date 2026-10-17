@@ -9,7 +9,7 @@ export const VOICE_LANGUAGES: { code: VoiceLanguage; label: string; flag: string
   { code: "en-US", label: "English", flag: "🇺🇸" },
 ];
 
-interface AppSettings {
+export interface AppSettings {
   vaultName: string;
   folder: string;
   configured: boolean;
@@ -19,11 +19,16 @@ interface AppSettings {
   maxInternationalEvents: number;
   /** Maximum number of national historical events generated per year (default 2) */
   maxNationalEvents: number;
+  /** Create one verified local snapshot per day when data changed. */
+  automaticSnapshotsEnabled: boolean;
+  /** Test-build-only simulated clock. Never used in normal or production builds. */
+  snapshotTestDate?: string;
 }
 
 interface SettingsContextType {
   settings: AppSettings;
   updateSettings: (updates: Partial<AppSettings>) => Promise<void>;
+  isLoading: boolean;
 }
 
 const SettingsContext = createContext<SettingsContextType | null>(null);
@@ -39,10 +44,12 @@ const DEFAULT_SETTINGS: AppSettings = {
   authorName: "",
   maxInternationalEvents: 2,
   maxNationalEvents: 2,
+  automaticSnapshotsEnabled: true,
 };
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     (async () => {
@@ -51,6 +58,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
         if (saved) setSettings({ ...DEFAULT_SETTINGS, ...saved });
       } catch {
         // ignore
+      } finally {
+        setIsLoading(false);
       }
     })();
   }, []);
@@ -58,12 +67,12 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const updateSettings = async (updates: Partial<AppSettings>) => {
     const next = { ...settings, ...updates };
     next.configured = !!next.vaultName.trim();
-    setSettings(next);
     await writeJsonFile(SETTINGS_FILE, next);
+    setSettings(next);
   };
 
   return (
-    <SettingsContext.Provider value={{ settings, updateSettings }}>
+    <SettingsContext.Provider value={{ settings, updateSettings, isLoading }}>
       {children}
     </SettingsContext.Provider>
   );

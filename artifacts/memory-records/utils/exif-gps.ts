@@ -1,11 +1,16 @@
 /**
  * Pure-JS JPEG EXIF GPS extractor.
  *
- * Expo's Android EXIF parser returns GPSLatitude/GPSLongitude as 0 because it
- * cannot decode the DMS rational string format stored in the GPS sub-IFD.
- * This module reads the raw JPEG bytes directly and parses the EXIF APP1
- * segment itself, which correctly handles the RATIONAL (degrees/minutes/seconds)
- * format on all platforms.
+ * Root cause on Android/Expo Go: Expo copies the picked image to its own cache
+ * directory and in doing so zeros out the GPS RATIONAL bytes in the EXIF block
+ * (ExifInterface re-writes the EXIF but cannot round-trip DMS rationals).
+ * `asset.exif.GPSLatitude` therefore returns 0 from Expo's own parser too.
+ *
+ * Fix strategy:
+ *  1. Try Expo's parsed EXIF (works on iOS).
+ *  2. Parse the cached file's raw EXIF bytes (works if EXIF is intact).
+ *  3. Locate the ORIGINAL file via `asset.fileName` at common Android gallery
+ *     paths and parse that — the source file has the real GPS rational values.
  *
  * No native modules — works in Expo Go.
  */
@@ -21,105 +26,53 @@ import * as FileSystem from "expo-file-system/legacy";
 export async function readGpsFromJpeg(
   uri: string
 ): Promise<{ lat: number; lng: number } | undefined> {
-  const b64 = await FileSystem.readAsStringAsync(uri, {
-    encoding: "base64" as const,
-  });
-  const buf = base64ToUint8Array(b64);
-  return extractJpegExifGps(buf);
+  try {
+    const b64 = await FileSystem.readAsStringAsync(uri, {
+      encoding: "base64" as const,
+    });
+    const buf = base64ToUint8Array(b64);
+    return extractJpegExifGps(buf);
+  } catch {
+    return undefined;
+  }
 }
 
-/** Dev-only: walks the TIFF/GPS IFD structure and reports where the parser stops. */
-export async function debugGpsRead(uri: string): Promise<string> {
-  try {
-    const b64 = await FileSystem.readAsStringAsync(uri, { encoding: "base64" as const });
-    const buf = base64ToUint8Array(b64);
-
-    if (buf[0] !== 0xff || buf[1] !== 0xd8) return "not a JPEG";
-
-    // Find APP1 with Exif header
-    let tiffStart = -1;
-    let pos = 2;
-    while (pos + 3 < buf.length) {
-      if (buf[pos] !== 0xff) return `lost sync at ${pos}`;
-      const marker = buf[pos + 1]; pos += 2;
-      if (marker === 0xff) { pos--; continue; }
-      if (marker === 0xd8 || marker === 0xd9) continue;
-      if (marker === 0xda) break;
-      const segLen = (buf[pos] << 8) | buf[pos + 1];
-      if (marker === 0xe1 && segLen > 8) {
-        const h = pos + 2;
-        if (buf[h]===0x45&&buf[h+1]===0x78&&buf[h+2]===0x69&&buf[h+3]===0x66&&buf[h+4]===0x00&&buf[h+5]===0x00) {
-          tiffStart = h + 6; break;
-        }
+/**
+ * Try to locate the original (un-copied) file from common Android gallery
+ * paths using the picker asset's fileName. Expo always copies the selected
+ * image to its own cache and zeroes the GPS rational bytes in the process,
+ * so we fall back to reading the source file directly when possible.
+ */
+export async function readGpsFromOriginalFile(
+  fileName: string | null | undefined
+): Promise<{ lat: number; lng: number } | undefined> {
+  if (!fileName) return undefined;
+  const dirs = [
+    "/storage/emulated/0/DCIM/Camera/",
+    "/storage/emulated/0/DCIM/",
+    "/storage/emulated/0/Pictures/",
+    "/storage/emulated/0/Pictures/Camera/",
+    "/sdcard/DCIM/Camera/",
+    "/sdcard/DCIM/",
+  ];
+  for (const dir of dirs) {
+    try {
+      const path = `file://${dir}${fileName}`;
+      const info = await FileSystem.getInfoAsync(path);
+      if (info.exists) {
+        const gps = await readGpsFromJpeg(path);
+        if (gps) return gps;
       }
-      pos += segLen;
+    } catch {
+      // Permission denied or file not found — try next directory
     }
-    if (tiffStart < 0) return "no Exif APP1";
-
-    const little = buf[tiffStart] === 0x49 && buf[tiffStart + 1] === 0x49;
-    const orderStr = little ? "LE" : "BE";
-    const r16 = (o: number) => little
-      ? buf[tiffStart+o] | (buf[tiffStart+o+1] << 8)
-      : (buf[tiffStart+o] << 8) | buf[tiffStart+o+1];
-    const r32 = (o: number) => {
-      const a=buf[tiffStart+o],b=buf[tiffStart+o+1],c=buf[tiffStart+o+2],d=buf[tiffStart+o+3];
-      return (little ? (a|(b<<8)|(c<<16)|(d<<24)) : ((a<<24)|(b<<16)|(c<<8)|d)) >>> 0;
-    };
-
-    const magic = r16(2);
-    if (magic !== 42) return `${orderStr} bad magic ${magic}`;
-
-    const ifd0Off = r32(4);
-    const ifd0Count = r16(ifd0Off);
-    let gpsOff: number | undefined;
-    for (let i = 0; i < ifd0Count; i++) {
-      const e = ifd0Off + 2 + i * 12;
-      if (r16(e) === 0x8825) { gpsOff = r32(e + 8); break; }
-    }
-    if (gpsOff === undefined) return `${orderStr} magic=${magic} ifd0@${ifd0Off} cnt=${ifd0Count} NO GPS IFD pointer`;
-
-    const gpsCnt = r16(gpsOff);
-    const tags: string[] = [];
-    let latInfo = "?", lngInfo = "?";
-    for (let i = 0; i < gpsCnt; i++) {
-      const e = gpsOff + 2 + i * 12;
-      const tag = r16(e), type = r16(e+2), count = r32(e+4);
-      const rawVal = r32(e+8);
-      tags.push(`t${tag.toString(16)}:ty${type}:c${count}:v${rawVal}`);
-      // Decode RATIONAL DMS for lat (tag 2) and lng (tag 4)
-      if ((tag === 2 || tag === 4) && type === 5 && count === 3) {
-        const dataAbsOff = tiffStart + rawVal;
-        const inBuf = dataAbsOff + 24 <= buf.length;
-        if (inBuf) {
-          const readR = (o: number) => {
-            const n = little
-              ? (buf[o]|(buf[o+1]<<8)|(buf[o+2]<<16)|(buf[o+3]<<24))>>>0
-              : ((buf[o]<<24)|(buf[o+1]<<16)|(buf[o+2]<<8)|buf[o+3])>>>0;
-            const d = little
-              ? (buf[o+4]|(buf[o+5]<<8)|(buf[o+6]<<16)|(buf[o+7]<<24))>>>0
-              : ((buf[o+4]<<24)|(buf[o+5]<<16)|(buf[o+6]<<8)|buf[o+7])>>>0;
-            return d ? n/d : 0;
-          };
-          const deg = readR(dataAbsOff), min = readR(dataAbsOff+8), sec = readR(dataAbsOff+16);
-          const dec = deg + min/60 + sec/3600;
-          const info = `off=${rawVal} [${deg.toFixed(2)}°${min.toFixed(2)}'${sec.toFixed(4)}"]=>${dec.toFixed(6)}`;
-          if (tag === 2) latInfo = info; else lngInfo = info;
-        } else {
-          const info = `off=${rawVal} OUT_OF_BOUNDS(buf=${buf.length})`;
-          if (tag === 2) latInfo = info; else lngInfo = info;
-        }
-      }
-    }
-    return `${orderStr} ifd0@${ifd0Off}(${ifd0Count}) gps@${gpsOff}(${gpsCnt})\nlat:${latInfo}\nlng:${lngInfo}`;
-  } catch (e) {
-    return `error:${String(e)}`;
   }
+  return undefined;
 }
 
 // ─── Base64 → Uint8Array ─────────────────────────────────────────────────────
 
 function base64ToUint8Array(b64: string): Uint8Array {
-  // atob is available in Hermes / React Native
   const binary = atob(b64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
@@ -131,39 +84,28 @@ function base64ToUint8Array(b64: string): Uint8Array {
 function extractJpegExifGps(
   buf: Uint8Array
 ): { lat: number; lng: number } | undefined {
-  // Must start with FFD8 (JPEG SOI)
   if (buf[0] !== 0xff || buf[1] !== 0xd8) return undefined;
 
   let pos = 2;
   while (pos + 3 < buf.length) {
-    if (buf[pos] !== 0xff) return undefined; // lost sync
+    if (buf[pos] !== 0xff) return undefined;
 
     const marker = buf[pos + 1];
     pos += 2;
 
-    // Skip fill bytes
-    if (marker === 0xff) {
-      pos--;
-      continue;
-    }
-    // Standalone markers (no payload length)
+    if (marker === 0xff) { pos--; continue; }
     if (marker === 0xd8 || marker === 0xd9) continue;
-    // SOS — compressed data follows; stop
     if (marker === 0xda) break;
 
     if (pos + 1 >= buf.length) break;
-    const segLen = (buf[pos] << 8) | buf[pos + 1]; // big-endian
+    const segLen = (buf[pos] << 8) | buf[pos + 1];
 
     if (marker === 0xe1 && segLen > 8) {
-      // APP1 — look for Exif\0\0 signature
       const hdr = pos + 2;
       if (
-        buf[hdr] === 0x45 && // E
-        buf[hdr + 1] === 0x78 && // x
-        buf[hdr + 2] === 0x69 && // i
-        buf[hdr + 3] === 0x66 && // f
-        buf[hdr + 4] === 0x00 &&
-        buf[hdr + 5] === 0x00
+        buf[hdr] === 0x45 && buf[hdr + 1] === 0x78 &&
+        buf[hdr + 2] === 0x69 && buf[hdr + 3] === 0x66 &&
+        buf[hdr + 4] === 0x00 && buf[hdr + 5] === 0x00
       ) {
         return parseTiffGps(buf, hdr + 6);
       }
@@ -180,9 +122,8 @@ function parseTiffGps(
   buf: Uint8Array,
   tiffStart: number
 ): { lat: number; lng: number } | undefined {
-  // Byte order: "II" = little-endian, "MM" = big-endian
   const little =
-    buf[tiffStart] === 0x49 && buf[tiffStart + 1] === 0x49; // "II"
+    buf[tiffStart] === 0x49 && buf[tiffStart + 1] === 0x49;
 
   const r16 = (o: number): number =>
     little
@@ -190,25 +131,20 @@ function parseTiffGps(
       : (buf[tiffStart + o] << 8) | buf[tiffStart + o + 1];
 
   const r32 = (o: number): number => {
-    const a = buf[tiffStart + o];
-    const b = buf[tiffStart + o + 1];
-    const c = buf[tiffStart + o + 2];
-    const d = buf[tiffStart + o + 3];
-    return little
-      ? (a | (b << 8) | (c << 16) | (d << 24)) >>> 0
-      : ((a << 24) | (b << 16) | (c << 8) | d) >>> 0;
+    const a = buf[tiffStart + o], b = buf[tiffStart + o + 1];
+    const c = buf[tiffStart + o + 2], d = buf[tiffStart + o + 3];
+    return (little
+      ? (a | (b << 8) | (c << 16) | (d << 24))
+      : ((a << 24) | (b << 16) | (c << 8) | d)) >>> 0;
   };
 
-  // Magic number must be 42
   if (r16(2) !== 42) return undefined;
 
   const ifd0Offset = r32(4);
-
-  // Walk IFD0 looking for GPS IFD pointer (tag 0x8825)
   if (ifd0Offset + 2 > buf.length - tiffStart) return undefined;
   const ifd0Count = r16(ifd0Offset);
-  let gpsIfdOffset: number | undefined;
 
+  let gpsIfdOffset: number | undefined;
   for (let i = 0; i < ifd0Count; i++) {
     const entry = ifd0Offset + 2 + i * 12;
     if (entry + 12 > buf.length - tiffStart) break;
@@ -218,15 +154,11 @@ function parseTiffGps(
     }
   }
   if (gpsIfdOffset === undefined) return undefined;
-
-  // Walk GPS IFD
   if (gpsIfdOffset + 2 > buf.length - tiffStart) return undefined;
-  const gpsCount = r16(gpsIfdOffset);
 
-  let latRef = "N";
-  let lngRef = "E";
-  let lat: number | undefined;
-  let lng: number | undefined;
+  const gpsCount = r16(gpsIfdOffset);
+  let latRef = "N", lngRef = "E";
+  let lat: number | undefined, lng: number | undefined;
 
   for (let i = 0; i < gpsCount; i++) {
     const entry = gpsIfdOffset + 2 + i * 12;
@@ -237,10 +169,8 @@ function parseTiffGps(
     const count = r32(entry + 4);
 
     if ((tag === 0x0001 || tag === 0x0003) && type === 2) {
-      // ASCII ref: GPSLatitudeRef or GPSLongitudeRef
-      // If count <= 4 the value is inline; otherwise it's an offset
-      const valOffset =
-        count <= 4 ? entry + 8 : r32(entry + 8);
+      // GPSLatitudeRef / GPSLongitudeRef — ASCII, usually inline (count ≤ 4)
+      const valOffset = count <= 4 ? entry + 8 : r32(entry + 8);
       const absOff = tiffStart + valOffset;
       if (absOff < buf.length) {
         const ch = String.fromCharCode(buf[absOff]);
@@ -252,19 +182,20 @@ function parseTiffGps(
       type === 5 /* RATIONAL */ &&
       count === 3
     ) {
-      // DMS as three RATIONAL values (each 8 bytes = num/den uint32)
-      const dataOffset = r32(entry + 8); // always offset, 24 bytes won't fit in 4
+      // GPSLatitude / GPSLongitude — 3 × RATIONAL (deg/min/sec)
+      const dataOffset = r32(entry + 8);
       const absOff = tiffStart + dataOffset;
       const dms = readRationals(buf, absOff, 3, little);
-      const dec = dms[0] + dms[1] / 60 + dms[2] / 3600;
-      if (tag === 0x0002) lat = dec;
-      else lng = dec;
+      // Only accept if we got real (non-zero) rational data
+      if (dms[0] !== 0 || dms[1] !== 0 || dms[2] !== 0) {
+        const dec = dms[0] + dms[1] / 60 + dms[2] / 3600;
+        if (tag === 0x0002) lat = dec;
+        else lng = dec;
+      }
     }
   }
 
   if (lat === undefined || lng === undefined) return undefined;
-  // Reject null-island — almost certainly a parse failure
-  if (lat === 0 && lng === 0) return undefined;
 
   const finalLat = latRef.toUpperCase() === "S" ? -Math.abs(lat) : Math.abs(lat);
   const finalLng = lngRef.toUpperCase() === "W" ? -Math.abs(lng) : Math.abs(lng);
