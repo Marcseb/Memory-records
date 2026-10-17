@@ -212,7 +212,7 @@ export default function HelpScreen() {
             <Text style={s.strong}>Photo from gallery</Text> — pick any photo and the app reads available EXIF metadata, including the date and GPS coordinates when the device exposes them. If no date is available, enter it manually. Tap the photo on the detail screen to view it full-screen. A camera icon overlay on any card lets you replace the photo at any time.
           </Bullet>
           <Bullet>
-            <Text style={s.strong}>Video clip</Text> <Text style={[s.strong, { color: colors.primary }]}>(Pro)</Text> — pick a short video from your gallery. The first frame is extracted as a thumbnail shown on the card and detail screen. Tap the thumbnail to play the video in a full-screen player with native controls. Requires the AI feature pack.
+            <Text style={s.strong}>Video clip</Text> — pick a short video from your gallery. The first frame is extracted as a thumbnail shown on the card and detail screen. Tap the thumbnail to play the video in a full-screen player with native controls. Video clips are included in the free core features.
           </Bullet>
           <Bullet>
             <Text style={s.strong}>Clipboard paste</Text> — paste a screenshot or image copied from another app. If no EXIF date is found, the app prompts you to enter one.
@@ -224,7 +224,7 @@ export default function HelpScreen() {
             <Text style={s.strong}>Voice-to-text</Text> — tap the microphone to dictate your note hands-free. Speech recognition runs on-device in your chosen language (French, Italian, or English).
           </Bullet>
           <Bullet>
-            <Text style={s.strong}>Voice memos</Text> — record an audio clip in the Voice Memo section below the note. Play, pause, seek, replace, or delete it from the record. Audio stays local; records with a memo show a speaker icon and receive the searchable <Text style={s.strong}>#voice-memo</Text> tag automatically.
+            <Text style={s.strong}>Voice memos</Text> <Text style={[s.strong, { color: colors.primary }]}>(Premium)</Text> — unlock Premium Features to record an audio clip in the Voice Memo section below the note. Play, pause, seek, replace, or delete it from the record. Audio stays local; records with a memo show a speaker icon and receive the searchable <Text style={s.strong}>#voice-memo</Text> tag automatically.
           </Bullet>
           <Bullet>
             <Text style={s.strong}>Tags</Text> — add one or more tags to organise memories by theme, person, or place. The new-record picker uses a compact horizontal chip row. Settings has a collapsible tag section with compact chips, direct deletion, and a new-tag input.
@@ -261,27 +261,27 @@ export default function HelpScreen() {
           </Bullet>
         </Section>
 
-        <Section icon="lock" title="Unlocking AI Features">
+        <Section icon="lock" title="Unlocking Premium Features">
           <Bullet>
-            The <Text style={s.strong}>AI Interviewer</Text>, <Text style={s.strong}>Historical Events</Text> generator, and <Text style={s.strong}>Video Attachments</Text> are grouped into a single AI feature pack, unlocked by a one-time <Text style={s.strong}>€5 contribution via PayPal</Text>. All other features — capturing memories, voice memos, sorting, search, tags, emotions, year ranks, Obsidian export, JSON backup — remain fully free with no payment required.
+            The <Text style={s.strong}>AI Interviewer</Text>, <Text style={s.strong}>Historical Events</Text> generator, and <Text style={s.strong}>Voice Memos</Text> are grouped into a Premium feature pack, unlocked by a one-time <Text style={s.strong}>€10 contribution via PayPal</Text>. Video clips and all other core features — capturing memories, sorting, search, tags, emotions, year ranks, Obsidian export, JSON backup — remain free.
           </Bullet>
           <Bullet>
-            Open <Text style={s.strong}>Settings → AI Features</Text> and tap <Text style={s.strong}>Unlock</Text>, or tap the lock icon on the <Text style={s.strong}>Start interview</Text> toggle, <Text style={s.strong}>Generate [year] events</Text> button, or <Text style={s.strong}>Video</Text> mode tile. The unlock sheet appears.
+            Open <Text style={s.strong}>Settings → Premium Features</Text> and tap <Text style={s.strong}>Unlock</Text>, or tap the lock icon on the <Text style={s.strong}>Start interview</Text> toggle, <Text style={s.strong}>Generate [year] events</Text> button, or Voice Memo control. The unlock sheet appears.
           </Bullet>
           <Bullet>
             The sheet shows your <Text style={s.strong}>device ID</Text> — a unique token tied to this installation. Copy it or note it.
           </Bullet>
           <Bullet>
-            Tap <Text style={s.strong}>Contribute €5 via PayPal</Text>. A pre-filled PayPal form opens in your browser. In the PayPal message field, include your device ID so the payment can be matched automatically.
+            Tap <Text style={s.strong}>Contribute €10 via PayPal</Text>. A pre-filled PayPal form opens in your browser. In the PayPal message field, include your device ID so the payment can be matched automatically.
           </Bullet>
           <Bullet>
-            After completing the payment, return to the app and tap <Text style={s.strong}>I've paid — check payment status</Text>. Enter the email address used for PayPal. The app matches the completed payment and unlocks the AI Interviewer, Historical Events, and Video Attachments immediately.
+            After completing the payment, return to the app and tap <Text style={s.strong}>I've paid — check payment status</Text>. Enter the email address used for PayPal. The app matches the completed payment and unlocks the AI Interviewer, Historical Events, and Voice Memos immediately.
           </Bullet>
           <Bullet>
             <Text style={s.strong}>Activation code alternative</Text> — send your device ID to the developer (contact via GitHub). Once your payment is verified manually, you'll receive a code in the format <Text style={s.strong}>MR-XXXXXXXX</Text>. Tap <Text style={s.strong}>I have an activation code</Text>, enter it, and tap <Text style={s.strong}>Activate</Text>.
           </Bullet>
           <Bullet>
-            The unlock is <Text style={s.strong}>permanent for this device</Text> — no subscription, no renewal. If you reinstall the app, tap Check payment status or re-enter your activation code to restore access.
+            The unlock is <Text style={s.strong}>permanent for this device</Text> — no subscription, no renewal. Existing unlocks remain valid. If you reinstall the app, tap Check payment status or re-enter your activation code to restore access.
           </Bullet>
           <View style={{ height: 10 }} />
           <InfoBox>

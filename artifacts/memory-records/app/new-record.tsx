@@ -223,8 +223,13 @@ export default function NewRecordScreen() {
   const newTagRef = useRef<TextInput>(null);
 
   // Unlock gate
-  const { isAiUnlocked } = useUnlock();
+  const { isPremiumUnlocked } = useUnlock();
   const [showUnlockModal, setShowUnlockModal] = useState(false);
+  const [unlockFeatureName, setUnlockFeatureName] = useState("AI Interviewer");
+  const requestUnlock = (featureName: string) => {
+    setUnlockFeatureName(featureName);
+    setShowUnlockModal(true);
+  };
 
   // Interview state
   const [interviewEnabled, setInterviewEnabled] = useState(false);
@@ -301,11 +306,6 @@ export default function NewRecordScreen() {
   };
 
   const handleVideoPick = async () => {
-    if (!isAiUnlocked) {
-      if (Platform.OS !== "web") Haptics.selectionAsync();
-      setShowUnlockModal(true);
-      return;
-    }
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       Alert.alert("Permission Required", "Allow access to your photo library to pick videos.");
@@ -391,9 +391,9 @@ export default function NewRecordScreen() {
   };
 
   const handleToggleInterview = async () => {
-    if (!isAiUnlocked) {
+    if (!isPremiumUnlocked) {
       if (Platform.OS !== "web") Haptics.selectionAsync();
-      setShowUnlockModal(true);
+      requestUnlock("AI Interviewer");
       return;
     }
     if (Platform.OS !== "web") Haptics.selectionAsync();
@@ -1326,15 +1326,8 @@ export default function NewRecordScreen() {
               <Text style={s.modeBtnSub}>Pick from gallery{"\n"}+ add a note</Text>
             </Pressable>
             <Pressable style={s.modeBtn} onPress={handleVideoPick}>
-              <View>
-                <Feather name="video" size={32} color={isAiUnlocked ? colors.primary : colors.mutedForeground} />
-                {!isAiUnlocked && (
-                  <View style={s.modeBtnLockBadge}>
-                    <Feather name="lock" size={9} color={colors.primaryForeground} />
-                  </View>
-                )}
-              </View>
-              <Text style={[s.modeBtnText, !isAiUnlocked && { color: colors.mutedForeground }]}>Video</Text>
+              <Feather name="video" size={32} color={colors.primary} />
+              <Text style={s.modeBtnText}>Video</Text>
               <Text style={s.modeBtnSub}>Pick a clip{"\n"}+ add a note</Text>
             </Pressable>
             <Pressable style={s.modeBtn} onPress={handleNoteMode}>
@@ -1739,11 +1732,34 @@ export default function NewRecordScreen() {
           {/* Voice Memo section */}
           <View style={s.section}>
             <Text style={s.sectionLabel}>Voice Memo</Text>
-            <VoiceMemoRecorder
-              audioUri={audioUri}
-              onSaved={(uri) => setAudioUri(uri)}
-              onDeleted={() => setAudioUri(undefined)}
-            />
+            {isPremiumUnlocked ? (
+              <VoiceMemoRecorder
+                audioUri={audioUri}
+                onSaved={(uri) => setAudioUri(uri)}
+                onDeleted={() => setAudioUri(undefined)}
+              />
+            ) : (
+              <Pressable
+                onPress={() => requestUnlock("Voice Memos")}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: 12,
+                  borderRadius: colors.radius,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  backgroundColor: colors.surface,
+                }}
+                accessibilityRole="button"
+              >
+                <Feather name="lock" size={16} color={colors.primary} />
+                <Text style={{ flex: 1, fontFamily: "Inter_500Medium", fontSize: 13, color: colors.foreground }}>
+                  Unlock Premium Features to record a voice memo
+                </Text>
+                <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+              </Pressable>
+            )}
           </View>
 
           {/* Obsidian hint */}
@@ -1764,9 +1780,10 @@ export default function NewRecordScreen() {
 
       <UnlockModal
         visible={showUnlockModal}
-        featureName="AI Interviewer"
+        featureName={unlockFeatureName}
         onClose={() => setShowUnlockModal(false)}
         onUnlocked={async () => {
+          if (unlockFeatureName !== "AI Interviewer") return;
           setInterviewEnabled(true);
           await startInterview(selectedTags, contextNote ?? undefined, contextNotes);
         }}

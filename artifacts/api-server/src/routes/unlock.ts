@@ -102,10 +102,11 @@ router.post("/unlock/paypal-ipn", async (req, res) => {
       return;
     }
 
-    // Accept EUR ≥ 5 or USD ≥ 5.50 (rough €5 equivalent)
+    // New contributions require EUR ≥ 10 or USD ≥ 11 (rough €10 equivalent).
+    // Existing device unlocks and previously recorded payments remain valid.
     const eligible =
-      (currency === "EUR" && gross >= 5.0) ||
-      (currency === "USD" && gross >= 5.5);
+      (currency === "EUR" && gross >= 10.0) ||
+      (currency === "USD" && gross >= 11.0);
     if (!eligible) {
       logger.warn({ gross, currency }, "IPN payment amount/currency not eligible");
       return;
@@ -186,7 +187,7 @@ router.post("/unlock/payment-status", async (req, res) => {
     if (rows.length === 0) {
       return res.status(404).json({
         unlocked: false,
-        error: "No completed €5 contribution was found for that PayPal email yet. PayPal confirmation can take a few minutes.",
+        error: "No eligible PayPal contribution was found for that email yet. PayPal confirmation can take a few minutes.",
       });
     }
 

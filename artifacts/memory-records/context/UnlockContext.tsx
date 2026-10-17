@@ -19,8 +19,8 @@ async function readJsonResponse<T>(response: Response): Promise<T | null> {
 }
 
 interface UnlockContextType {
-  /** Whether the AI features are unlocked for this device. */
-  isAiUnlocked: boolean;
+  /** Whether the premium feature pack (AI features and voice memos) is unlocked. */
+  isPremiumUnlocked: boolean;
   /** True while a network status check is in progress. */
   isChecking: boolean;
   /** Manually re-check unlock status against the server. */
@@ -35,7 +35,7 @@ const UnlockContext = createContext<UnlockContextType | null>(null);
 
 export function UnlockProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  const [isAiUnlocked, setIsAiUnlocked] = useState(false);
+  const [isPremiumUnlocked, setIsPremiumUnlocked] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
 
   const deviceToken = user?.token ?? null;
@@ -54,7 +54,7 @@ export function UnlockProvider({ children }: { children: React.ReactNode }) {
       clearTimeout(timeout);
       if (res.ok) {
         const data = (await res.json()) as { unlocked: boolean };
-        setIsAiUnlocked(data.unlocked);
+        setIsPremiumUnlocked(data.unlocked);
         if (data.unlocked) {
           await setSecureItem(UNLOCK_STORE_KEY, String(Date.now()));
         } else {
@@ -84,7 +84,7 @@ export function UnlockProvider({ children }: { children: React.ReactNode }) {
         clearTimeout(timeout);
         const data = await readJsonResponse<{ unlocked?: boolean; error?: string }>(res);
         if (res.ok && data?.unlocked) {
-          setIsAiUnlocked(true);
+          setIsPremiumUnlocked(true);
           await setSecureItem(UNLOCK_STORE_KEY, String(Date.now()));
           return { ok: true };
         }
@@ -99,7 +99,7 @@ export function UnlockProvider({ children }: { children: React.ReactNode }) {
           );
           const statusData = await readJsonResponse<{ unlocked?: boolean }>(statusRes);
           if (statusRes.ok && statusData?.unlocked) {
-            setIsAiUnlocked(true);
+            setIsPremiumUnlocked(true);
             await setSecureItem(UNLOCK_STORE_KEY, String(Date.now()));
             return { ok: true };
           }
@@ -130,7 +130,7 @@ export function UnlockProvider({ children }: { children: React.ReactNode }) {
       if (cached) {
         const ts = parseInt(cached, 10);
         if (!isNaN(ts) && Date.now() - ts < CACHE_TTL_MS) {
-          setIsAiUnlocked(true);
+          setIsPremiumUnlocked(true);
           return; // Cache still fresh — skip network until next open
         }
       }
@@ -158,7 +158,7 @@ export function UnlockProvider({ children }: { children: React.ReactNode }) {
         clearTimeout(timeout);
         const data = (await res.json()) as { unlocked?: boolean; error?: string };
         if (res.ok && data.unlocked) {
-          setIsAiUnlocked(true);
+          setIsPremiumUnlocked(true);
           await setSecureItem(UNLOCK_STORE_KEY, String(Date.now()));
           return { ok: true };
         }
@@ -175,7 +175,7 @@ export function UnlockProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <UnlockContext.Provider
-      value={{ isAiUnlocked, isChecking, checkStatus, checkPayment, activateCode }}
+      value={{ isPremiumUnlocked, isChecking, checkStatus, checkPayment, activateCode }}
     >
       {children}
     </UnlockContext.Provider>

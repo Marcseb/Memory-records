@@ -45,8 +45,9 @@ export default function RecordDetailScreen() {
   const { settings } = useSettings();
   const { saveToObsidian } = useObsidian();
   const { generate: generateEvents, isLoading: generatingEvents } = useHistoricalEvents();
-  const { isAiUnlocked } = useUnlock();
+  const { isPremiumUnlocked } = useUnlock();
   const [showUnlockModal, setShowUnlockModal] = useState(false);
+  const [unlockFeatureName, setUnlockFeatureName] = useState("Historical Events");
   const [saving, setSaving] = useState(false);
   const [videoModalUri, setVideoModalUri] = useState<string | null>(null);
   const [photoModalUri, setPhotoModalUri] = useState<string | null>(null);
@@ -61,6 +62,10 @@ export default function RecordDetailScreen() {
   const [editedAudioUri, setEditedAudioUri] = useState<string | undefined>(undefined);
   const editInputRef = useRef<TextInput>(null);
   const currentYear = new Date().getFullYear();
+  const requestUnlock = (featureName: string) => {
+    setUnlockFeatureName(featureName);
+    setShowUnlockModal(true);
+  };
 
   const commitYearInput = () => {
     const parsed = parseInt(yearInputText, 10);
@@ -207,8 +212,8 @@ export default function RecordDetailScreen() {
   };
 
   const handleGenerateEvents = async () => {
-    if (!isAiUnlocked) {
-      setShowUnlockModal(true);
+    if (!isPremiumUnlocked) {
+      requestUnlock("Historical Events");
       return;
     }
     if (!record.contextYear) return;
@@ -479,6 +484,22 @@ export default function RecordDetailScreen() {
       textAlignVertical: "top",
       backgroundColor: colors.card,
     },
+    lockedVoiceMemo: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 10,
+      padding: 12,
+      borderRadius: colors.radius,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.surface,
+    },
+    lockedVoiceMemoText: {
+      flex: 1,
+      fontSize: 13,
+      fontFamily: "Inter_500Medium",
+      color: colors.foreground,
+    },
     editActions: {
       flexDirection: "row",
       gap: 10,
@@ -730,10 +751,6 @@ export default function RecordDetailScreen() {
   };
 
   const handlePickVideo = async () => {
-    if (!isAiUnlocked) {
-      setShowUnlockModal(true);
-      return;
-    }
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) {
       Alert.alert("Permission Required", "Allow access to your photo library to pick videos.");
@@ -1145,11 +1162,27 @@ export default function RecordDetailScreen() {
 
                 {/* Voice memo — available while editing */}
                 <View style={{ marginTop: 4 }}>
-                  <VoiceMemoRecorder
-                    audioUri={editedAudioUri}
-                    onSaved={(uri) => setEditedAudioUri(uri)}
-                    onDeleted={() => setEditedAudioUri(undefined)}
-                  />
+                  {isPremiumUnlocked ? (
+                    <VoiceMemoRecorder
+                      audioUri={editedAudioUri}
+                      onSaved={(uri) => setEditedAudioUri(uri)}
+                      onDeleted={() => setEditedAudioUri(undefined)}
+                    />
+                  ) : (
+                    <Pressable
+                      style={s.lockedVoiceMemo}
+                      onPress={() => requestUnlock("Voice Memos")}
+                      accessibilityRole="button"
+                    >
+                      <Feather name="lock" size={16} color={colors.primary} />
+                      <Text style={s.lockedVoiceMemoText}>
+                        {editedAudioUri
+                          ? "Voice memo attached — unlock to play or edit it"
+                          : "Unlock Premium Features to add a voice memo"}
+                      </Text>
+                      <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+                    </Pressable>
+                  )}
                 </View>
 
                 <View style={s.editActions}>
@@ -1168,7 +1201,21 @@ export default function RecordDetailScreen() {
                 <Text style={s.noteText}>{record.note || "No note added."}</Text>
                 {record.audioUri && (
                   <View style={{ marginTop: 12 }}>
-                    <VoiceMemoPlayer uri={record.audioUri} />
+                    {isPremiumUnlocked ? (
+                      <VoiceMemoPlayer uri={record.audioUri} />
+                    ) : (
+                      <Pressable
+                        style={s.lockedVoiceMemo}
+                        onPress={() => requestUnlock("Voice Memos")}
+                        accessibilityRole="button"
+                      >
+                        <Feather name="lock" size={16} color={colors.primary} />
+                        <Text style={s.lockedVoiceMemoText}>
+                          Voice memo attached — unlock Premium Features to play it
+                        </Text>
+                        <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+                      </Pressable>
+                    )}
                   </View>
                 )}
               </>
@@ -1182,14 +1229,14 @@ export default function RecordDetailScreen() {
               disabled={generatingEvents}
             >
               <Feather
-                name={isAiUnlocked ? "globe" : "lock"}
+                name={isPremiumUnlocked ? "globe" : "lock"}
                 size={18}
                 color={colors.historicalForeground}
               />
               <Text style={s.generateEventsBtnText}>
                 {generatingEvents
                   ? "Generating events…"
-                  : isAiUnlocked
+                  : isPremiumUnlocked
                   ? `Generate ${record.contextYear} events`
                   : `Generate ${record.contextYear} events — unlock`}
               </Text>
@@ -1217,7 +1264,7 @@ export default function RecordDetailScreen() {
 
       <UnlockModal
         visible={showUnlockModal}
-        featureName="Historical Events"
+        featureName={unlockFeatureName}
         onClose={() => setShowUnlockModal(false)}
       />
       <PhotoViewerModal uri={photoModalUri} onClose={() => setPhotoModalUri(null)} />

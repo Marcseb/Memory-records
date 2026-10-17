@@ -20,7 +20,7 @@ import { API_SERVER_URL } from "@/constants/api";
 
 interface Props {
   visible: boolean;
-  featureName: string; // e.g. "AI Interviewer" or "Historical Events"
+  featureName: string; // e.g. "AI Interviewer", "Historical Events", or "Voice Memos"
   onClose: () => void;
   /** Called after a successful unlock so the parent can proceed immediately. */
   onUnlocked?: () => void;
@@ -31,8 +31,8 @@ function buildPayPalUrl(deviceToken: string): string {
   const params = new URLSearchParams({
     cmd: "_donations",
     business: "7AUYVWJE39NMQ",
-    item_name: "Memory Records AI Features",
-    amount: "5.00",
+    item_name: "Memory Records Premium Features",
+    amount: "10.00",
     currency_code: "EUR",
     custom: deviceToken,
     notify_url: notifyUrl,
@@ -319,7 +319,7 @@ export function UnlockModal({ visible, featureName, onClose, onUnlocked }: Props
             <View style={s.iconBox}>
               <Feather name="zap" size={20} color={colors.historicalForeground} />
             </View>
-            <Text style={s.title}>Unlock AI Features</Text>
+            <Text style={s.title}>Unlock Premium Features</Text>
             <Pressable style={s.closeBtn} onPress={onClose} hitSlop={8}>
               <Feather name="x" size={16} color={colors.mutedForeground} />
             </Pressable>
@@ -327,10 +327,10 @@ export function UnlockModal({ visible, featureName, onClose, onUnlocked }: Props
 
           {/* Description */}
           <Text style={s.desc}>
-            <Text style={s.strong}>{featureName}</Text> is part of the AI feature pack.
-            A small contribution of <Text style={s.strong}>€5</Text> unlocks all AI
-            features permanently on this device and helps keep Memory Records free
-            and open-source.
+            <Text style={s.strong}>{featureName}</Text> is part of the Premium feature pack.
+            A one-time <Text style={s.strong}>€10 contribution</Text> unlocks the AI
+            features and voice memos permanently on this device, while keeping core
+            features free and open-source.
           </Text>
 
           {/* Feature list */}
@@ -344,8 +344,8 @@ export function UnlockModal({ visible, featureName, onClose, onUnlocked }: Props
               <Text style={s.featureText}>Historical Events — AI-written year context</Text>
             </View>
             <View style={s.featureRow}>
-              <Feather name="video" size={15} color={colors.primary} />
-              <Text style={s.featureText}>Video — attach video clips to memories</Text>
+              <Feather name="mic" size={15} color={colors.primary} />
+              <Text style={s.featureText}>Voice memos — record and replay audio memories</Text>
             </View>
           </View>
 
@@ -358,7 +358,7 @@ export function UnlockModal({ visible, featureName, onClose, onUnlocked }: Props
           {/* PayPal button */}
           <Pressable style={s.paypalBtn} onPress={handlePayPal}>
             <Text style={{ fontSize: 20 }}>💙</Text>
-            <Text style={s.paypalBtnText}>Contribute €5 via PayPal</Text>
+            <Text style={s.paypalBtnText}>Contribute €10 via PayPal</Text>
             <Feather name="external-link" size={15} color={colors.historicalForeground} />
           </Pressable>
 

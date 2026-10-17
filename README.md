@@ -49,7 +49,7 @@ Open the **Home** tab and tap **+**:
 
 1. Pick a photo from your gallery — the app reads available EXIF data such as the date and, when exposed by the device, GPS coordinates.
 2. Add a text note, or tap the microphone to dictate hands-free.
-3. Optionally record a voice memo in the **Voice Memo** section below the note.
+3. If Premium is unlocked, optionally record a voice memo in the **Voice Memo** section below the note.
 4. Add tags to organise the memory, select an emotion tag, and optionally enter the Memory Year (the year the memory is from, if different from today).
 5. Tap **Save**.
 
@@ -60,11 +60,11 @@ Your memory is stored locally, instantly, with no upload.
 ## Capturing memories
 
 - **Photo from gallery** — available EXIF metadata is extracted automatically, including the date and GPS coordinates when the device exposes them. If a date is unavailable, enter it manually. Tap the photo on the detail screen to view it full-screen. A camera overlay on any card lets you replace the photo at any time.
-- **Video clip** *(Pro)* — pick a short video from your gallery. The first frame is extracted as a thumbnail and shown on the card. Tap the thumbnail on the detail screen to play the video full-screen. Requires the AI feature pack to be unlocked.
+- **Video clip** — pick a short video from your gallery. The first frame is extracted as a thumbnail and shown on the card. Tap the thumbnail on the detail screen to play the video full-screen. Video clips are part of the free core features.
 - **Clipboard paste** — paste a screenshot or image copied from another app. If no EXIF date is found, the app prompts you to enter one.
 - **Text-only note** — write a note without any photo; useful for thoughts or conversations.
 - **Voice-to-text** — dictate your note hands-free. Speech recognition runs on-device in French, Italian, or English.
-- **Voice memos** — record an audio clip below the note, then play, pause, seek, replace, or delete it from the record. Voice memos are stored locally in the app. Records with audio show a speaker icon and receive the searchable `#voice-memo` tag automatically.
+- **Voice memos** *(Premium)* — unlock the premium feature pack to record an audio clip below the note, then play, pause, seek, replace, or delete it from the record. Voice memos are stored locally in the app. Records with audio show a speaker icon and receive the searchable `#voice-memo` tag automatically.
 - **Tags** — add one or more tags per memory to organise by theme, person, or place. The new-record picker uses a compact horizontal chip row. Settings provides a collapsible tag section with compact chips and a control for creating new tags.
 - **Emotion tags** — attach one of 22 colour-coded emotions (joy, nostalgia, gratitude, grief, etc.) to each memory. Used for grouping and filtering in the home list.
 - **Memory Year** — optionally record the year the memory is from (e.g. 1998), independently of today's date. Used for chronological sorting.
@@ -99,22 +99,22 @@ The first time any note in a year is moved, all notes in that year are automatic
 
 ---
 
-## Unlocking AI Features
+## Unlocking Premium Features
 
-The **AI Interviewer**, **Historical Events** generator, and **Video Attachments** are grouped into a single AI feature pack, unlocked by a one-time **€5 contribution via PayPal**. All other features (capturing memories, voice memos, sorting, search, tags, emotions, year ranks, Obsidian export/import, JSON backup) remain fully free and require no payment.
+The **AI Interviewer**, **Historical Events** generator, and **Voice Memos** are grouped into a single Premium feature pack, unlocked by a one-time **€10 contribution via PayPal**. Video clips and all other core features (capturing memories, sorting, search, tags, emotions, year ranks, Obsidian export/import, JSON backup) remain free and require no payment.
 
 ### How to unlock
 
-1. Open **Settings → AI Features** and tap **Unlock**, or tap the lock badge on the **Start interview** toggle or **Generate [year] events** button.
-2. The **Unlock AI Features** sheet appears. It shows your **device ID** — a unique token tied to this installation.
-3. Tap **Contribute €5 via PayPal**. A pre-filled PayPal form opens in your browser.  
+1. Open **Settings → Premium Features** and tap **Unlock**, or tap the lock badge on the **Start interview** toggle, **Generate [year] events** button, or Voice Memo control.
+2. The **Unlock Premium Features** sheet appears. It shows your **device ID** — a unique token tied to this installation.
+3. Tap **Contribute €10 via PayPal**. A pre-filled PayPal form opens in your browser.
    — In the PayPal message / "special instructions" field, include your device ID so the payment can be matched automatically.
-4. After payment, tap **I've paid — check payment status**. The app polls the server; if your payment has been processed, the AI Interviewer, Historical Events, and Video Attachments unlock immediately.
+4. After payment, tap **I've paid — check payment status**. The app polls the server; if your payment has been processed, the AI Interviewer, Historical Events, and Voice Memos unlock immediately.
 5. **Activation code (alternative):** If you prefer, send your device ID to the developer. Once your payment is confirmed, you'll receive a one-time code in the format `MR-XXXXXXXX`. Tap **I have an activation code**, enter it, and tap **Activate**.
 
 The unlock is stored on the server and cached on-device for 12 hours. If you reinstall the app, re-enter your activation code or tap **Check payment status** to restore access.
 
-> The €5 contribution is permanent for the device — no subscription, no recurring charges.
+> The €10 contribution is permanent for the device — no subscription, no recurring charges. Existing unlocks remain valid.
 
 ---
 

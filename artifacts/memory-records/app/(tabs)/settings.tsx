@@ -208,7 +208,7 @@ export default function SettingsScreen() {
     }, [refreshCompleteBackupReminder, refreshLocalSnapshots]),
   );
 
-  const { isAiUnlocked, checkStatus, isChecking } = useUnlock();
+  const { isPremiumUnlocked, checkStatus, isChecking } = useUnlock();
   const [tagsCollapsed, setTagsCollapsed] = useState(true);
   const [newTagDraft, setNewTagDraft] = useState("");
   const [showUnlockModal, setShowUnlockModal] = useState(false);
@@ -1558,7 +1558,7 @@ export default function SettingsScreen() {
 
       <UnlockModal
         visible={showUnlockModal}
-        featureName="AI Features"
+        featureName="Premium Features"
         onClose={() => setShowUnlockModal(false)}
       />
 
@@ -1844,31 +1844,31 @@ export default function SettingsScreen() {
           </Pressable>
         </View>
 
-        {/* AI Features Unlock */}
+        {/* Premium Features Unlock */}
         <View style={s.section}>
-          <Text style={s.sectionTitle}>AI Features</Text>
+          <Text style={s.sectionTitle}>Premium Features</Text>
           <View style={s.card}>
             <Pressable
               style={[s.row, { gap: 12 }]}
-              onPress={isAiUnlocked ? undefined : () => setShowUnlockModal(true)}
+              onPress={isPremiumUnlocked ? undefined : () => setShowUnlockModal(true)}
             >
               <Feather
-                name={isAiUnlocked ? "unlock" : "lock"}
+                name={isPremiumUnlocked ? "unlock" : "lock"}
                 size={16}
-                color={isAiUnlocked ? colors.success : colors.historicalForeground}
+                color={isPremiumUnlocked ? colors.success : colors.historicalForeground}
               />
               <View style={{ flex: 1, gap: 2 }}>
-                <Text style={s.rowLabel}>AI Interviewer & Historical Events</Text>
-                <Text style={[s.rowValue, { fontSize: 12, color: isAiUnlocked ? colors.success : colors.mutedForeground }]}>
-                  {isAiUnlocked ? "Unlocked — both AI features active" : "Locked — €5 contribution required"}
+                <Text style={s.rowLabel}>AI Interviewer, Historical Events & Voice Memos</Text>
+                <Text style={[s.rowValue, { fontSize: 12, color: isPremiumUnlocked ? colors.success : colors.mutedForeground }]}>
+                  {isPremiumUnlocked ? "Unlocked — all premium features active" : "Locked — €10 contribution required"}
                 </Text>
               </View>
-              {!isAiUnlocked && (
+              {!isPremiumUnlocked && (
                 <View style={{ backgroundColor: colors.historical, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 5, borderWidth: 1, borderColor: colors.historicalBorder }}>
                   <Text style={{ fontFamily: "Inter_600SemiBold", fontSize: 12, color: colors.historicalForeground }}>Unlock</Text>
                 </View>
               )}
-              {isAiUnlocked && (
+              {isPremiumUnlocked && (
                 <Pressable
                   hitSlop={8}
                   onPress={checkStatus}
