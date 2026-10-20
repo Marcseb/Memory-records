@@ -1,10 +1,12 @@
 import { Feather } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import Constants from "expo-constants";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Animated,
   Alert,
   FlatList,
   Platform,
@@ -19,6 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { RecordCard } from "@/components/RecordCard";
 import { EMOTIONS, getEmotion } from "@/constants/emotions";
 import { MemoryRecord, useRecords } from "@/context/RecordsContext";
+import { useSettings } from "@/context/SettingsContext";
 import { useColors } from "@/hooks/useColors";
 import { computeStreak } from "@/utils/streak";
 import { copyImageToAppStorage } from "@/utils/storage";
@@ -27,6 +30,13 @@ const UNTAGGED_KEY = "__untagged__";
 const SORT_KEY = "mr_sort_mode";
 
 type SortMode = "tag" | "emotion" | "input-date" | "note-date";
+
+function localDateKey(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 const SORT_LABELS: { mode: SortMode; label: string; icon: string }[] = [
   { mode: "tag",        label: "Folder",  icon: "folder" },
@@ -50,10 +60,13 @@ export default function HomeScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { records, deleteRecord, updateRecord, reorderWithinYear, isLoading } = useRecords();
+  const { settings } = useSettings();
   const [refreshing] = useState(false);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [sortMode, setSortMode] = useState<SortMode>("tag");
   const [searchQuery, setSearchQuery] = useState("");
+  const shuffleProgress = useRef(new Animated.Value(0)).current;
+  const isSurpriseAnimating = useRef(false);
 
   useEffect(() => {
     AsyncStorage.getItem(SORT_KEY).then((v) => {
@@ -104,6 +117,55 @@ export default function HomeScreen() {
   const handleHelp = async () => {
     if (Platform.OS !== "web") await Haptics.selectionAsync();
     router.push("/help");
+  };
+
+  const handleSurpriseMe = () => {
+    if (isSurpriseAnimating.current) return;
+
+    if (records.length < 2) {
+      Alert.alert(
+        "Add more memories first",
+        "Save at least two memories to use Surprise Me.",
+      );
+      return;
+    }
+
+    const simulatedToday =
+      Constants.expoConfig?.extra?.snapshotTestBuild === true &&
+      settings.snapshotTestDate
+        ? new Date(settings.snapshotTestDate)
+        : new Date();
+    const today = localDateKey(simulatedToday);
+    const pastRecords = records.filter(
+      (record) => record.date.slice(0, 10) !== today,
+    );
+
+    if (pastRecords.length === 0) {
+      Alert.alert(
+        "No past memories yet",
+        "Surprise Me picks from memories dated before today.",
+      );
+      return;
+    }
+
+    const pickedRecord =
+      pastRecords[Math.floor(Math.random() * pastRecords.length)];
+    if (Platform.OS !== "web") void Haptics.selectionAsync();
+
+    isSurpriseAnimating.current = true;
+    Animated.timing(shuffleProgress, {
+      toValue: 1,
+      duration: 320,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      isSurpriseAnimating.current = false;
+      if (!finished) return;
+      shuffleProgress.setValue(0);
+      router.push({
+        pathname: "/record/[id]",
+        params: { id: pickedRecord.id },
+      });
+    });
   };
 
   const handleSortMode = async (mode: SortMode) => {
@@ -455,6 +517,14 @@ export default function HomeScreen() {
   });
 
   const isGrouped = sortMode === "tag" || sortMode === "emotion";
+  const shuffleRotation = shuffleProgress.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: ["0deg", "180deg", "360deg"],
+  });
+  const shuffleScale = shuffleProgress.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [1, 1.16, 1],
+  });
 
   return (
     <View style={s.container}>
@@ -472,6 +542,24 @@ export default function HomeScreen() {
           <Pressable style={s.addBtn} onPress={handleNewRecord} testID="add-record-btn">
             <Feather name="plus" size={22} color="#fff" />
           </Pressable>
+          {records.length >= 2 && (
+            <Pressable
+              style={s.helpBtn}
+              onPress={handleSurpriseMe}
+              accessibilityRole="button"
+              accessibilityLabel="Surprise me with a past memory"
+              accessibilityHint="Opens a random memory from before today"
+              testID="surprise-memory-btn"
+            >
+              <Animated.View
+                style={{
+                  transform: [{ rotate: shuffleRotation }, { scale: shuffleScale }],
+                }}
+              >
+                <Feather name="shuffle" size={17} color={colors.primary} />
+              </Animated.View>
+            </Pressable>
+          )}
           <Pressable style={s.helpBtn} onPress={handleHelp} accessibilityLabel="Help & Features Guide">
             <Feather name="help-circle" size={18} color={colors.mutedForeground} />
           </Pressable>

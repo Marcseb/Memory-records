@@ -1,21 +1,13 @@
 /**
  * Pure-JS JPEG EXIF GPS extractor.
  *
- * Root cause on Android/Expo Go: Expo copies the picked image to its own cache
- * directory and in doing so zeros out the GPS RATIONAL bytes in the EXIF block
- * (ExifInterface re-writes the EXIF but cannot round-trip DMS rationals).
- * `asset.exif.GPSLatitude` therefore returns 0 from Expo's own parser too.
- *
- * Fix strategy:
- *  1. Try Expo's parsed EXIF (works on iOS).
- *  2. Parse the cached file's raw EXIF bytes (works if EXIF is intact).
- *  3. Locate the ORIGINAL file via `asset.fileName` at common Android gallery
- *     paths and parse that — the source file has the real GPS rational values.
- *
- * No native modules — works in Expo Go.
+ * Android's image picker may copy the selected photo to a cache file with GPS
+ * rationals stripped. Prefer the original MediaLibrary asset URI and retain
+ * raw-EXIF and legacy path fallbacks for providers that do not expose it.
  */
 
 import * as FileSystem from "expo-file-system/legacy";
+import { Platform } from "react-native";
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 
@@ -68,6 +60,82 @@ export async function readGpsFromOriginalFile(
     }
   }
   return undefined;
+}
+
+/**
+ * Read the selected Android gallery item's location from MediaStore.
+ *
+ * The image picker returns a MediaStore ID for gallery-backed photos. Unlike
+ * the picker cache URI, this reads metadata through the original library asset.
+ * Android requires both photo access and ACCESS_MEDIA_LOCATION for this query.
+ */
+export async function readGpsFromGalleryAsset(
+  assetId: string | null | undefined
+): Promise<{ lat: number; lng: number } | undefined> {
+  if (!assetId || Platform.OS !== "android") return undefined;
+
+  const normalizedId = assetId.trim();
+
+  try {
+    // Expo SDK 57's old getAssetInfoAsync API lives on the /legacy entrypoint;
+    // the package root now exposes the class-based API.
+    const MediaLibrary = await import("expo-media-library");
+    const LegacyMediaLibrary = await import("expo-media-library/legacy");
+    let permission = await MediaLibrary.getPermissionsAsync(false, ["photo"]);
+    if (!permission.granted) {
+      permission = await MediaLibrary.requestPermissionsAsync(false, ["photo"]);
+    }
+    if (!permission.granted) return undefined;
+
+    if (!normalizedId.startsWith("content://")) {
+      try {
+        const info = await LegacyMediaLibrary.getAssetInfoAsync(normalizedId);
+        if (info.localUri) {
+          const gps = await readGpsFromJpeg(info.localUri);
+          if (isValidGps(gps)) return gps;
+        }
+      } catch {
+        // Some picker providers do not expose a MediaLibrary asset info entry.
+      }
+    }
+
+    // The native MediaStore API can still expose coordinates when its original
+    // URI is not directly readable as a file by FileSystem.
+    let assetUri = normalizedId.startsWith("content://") ? normalizedId : undefined;
+    if (!assetUri) {
+      try {
+        assetUri = await LegacyMediaLibrary.getAssetContentUriAsync(normalizedId);
+      } catch {
+        if (/^\d+$/.test(normalizedId)) {
+          assetUri = `content://media/external/images/media/${normalizedId}`;
+        }
+      }
+    }
+    if (!assetUri) return undefined;
+
+    const location = await new MediaLibrary.Asset(assetUri).getLocation();
+    if (!location) return undefined;
+
+    const { latitude, longitude } = location;
+    const gps = { lat: latitude, lng: longitude };
+    return isValidGps(gps) ? gps : undefined;
+  } catch (error) {
+    console.warn("[GalleryGps] Could not read original photo location:", error);
+    return undefined;
+  }
+}
+
+function isValidGps(
+  gps: { lat: number; lng: number } | undefined
+): gps is { lat: number; lng: number } {
+  return !!gps &&
+    Number.isFinite(gps.lat) &&
+    Number.isFinite(gps.lng) &&
+    gps.lat >= -90 &&
+    gps.lat <= 90 &&
+    gps.lng >= -180 &&
+    gps.lng <= 180 &&
+    (gps.lat !== 0 || gps.lng !== 0);
 }
 
 // ─── Base64 → Uint8Array ─────────────────────────────────────────────────────

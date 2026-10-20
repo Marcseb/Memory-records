@@ -3,7 +3,12 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { configureGradle, DAEMON_CRITERIA } = require("../plugins/with-local-android-build.cjs");
+const {
+  configureGradle,
+  configureGoogleMapsManifest,
+  normalizeGoogleMapsApiKey,
+  DAEMON_CRITERIA,
+} = require("../plugins/with-local-android-build.cjs");
 const { validateConfig, backupNativeProject } = require("./prepare-android.cjs");
 
 test("Gradle customization is idempotent and preserves unrelated configuration", () => {
@@ -31,6 +36,27 @@ test("daemon criteria use only installed JDK 17 without host-specific paths or d
   assert.match(DAEMON_CRITERIA, /^toolchainVersion=17$/m);
   assert.ok(!DAEMON_CRITERIA.includes("toolchainUrl"));
   assert.ok(!DAEMON_CRITERIA.includes("/home/"));
+});
+
+test("Google Maps key is injected without duplication or logging its value", () => {
+  const manifest = { manifest: { application: [{ "meta-data": [] }] } };
+  configureGoogleMapsManifest(manifest, "restricted-test-key");
+  configureGoogleMapsManifest(manifest, "replacement-test-key");
+  const metadata = manifest.manifest.application[0]["meta-data"];
+  assert.equal(metadata.length, 1);
+  assert.equal(metadata[0].$["android:name"], "com.google.android.geo.API_KEY");
+  assert.equal(metadata[0].$["android:value"], "replacement-test-key");
+});
+
+test("Google Maps manifest stays unchanged when no local key is supplied", () => {
+  const manifest = { manifest: { application: [{ "meta-data": [] }] } };
+  assert.equal(configureGoogleMapsManifest(manifest, ""), manifest);
+  assert.deepEqual(manifest.manifest.application[0]["meta-data"], []);
+});
+
+test("Google Maps key is optional while the in-app map is disabled", () => {
+  assert.equal(normalizeGoogleMapsApiKey(""), "");
+  assert.equal(normalizeGoogleMapsApiKey("  restricted-key  "), "restricted-key");
 });
 
 function production() {

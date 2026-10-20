@@ -5,6 +5,7 @@ import * as FileSystem from "expo-file-system/legacy";
 import { StorageAccessFramework } from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import * as Haptics from "expo-haptics";
+import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import Constants from "expo-constants";
 import { getSecureItem, setSecureItem } from "@/utils/secureStorage";
 import React, { useCallback, useEffect, useState } from "react";
@@ -31,6 +32,7 @@ import { MemoryRecord, useRecords } from "@/context/RecordsContext";
 import { VoiceLanguage, VOICE_LANGUAGES, useSettings } from "@/context/SettingsContext";
 import { useUnlock } from "@/context/UnlockContext";
 import { UnlockModal } from "@/components/UnlockModal";
+import { AppLockSettings } from "@/components/AppLock";
 import { useColors } from "@/hooks/useColors";
 import { zipSync } from "fflate";
 import { buildAllExportData } from "@/hooks/useObsidian";
@@ -50,9 +52,11 @@ import {
   type CompleteBackupProgress,
 } from "@/utils/completeBackup";
 import {
+  createLocalSnapshot,
   deleteLocalSnapshot,
   discardLocalSnapshotRestore,
   getSnapshotStatus,
+  isLocalSnapshotOperationActive,
   listLocalSnapshots,
   resetSnapshotTestHistory,
   SNAPSHOT_CHANGE_LOGIC_VERSION,
@@ -69,6 +73,17 @@ import {
   type CompleteBackupReminderStatus,
 } from "@/utils/completeBackupReminder";
 
+async function withSnapshotWakeLock<T>(operation: () => Promise<T>): Promise<T> {
+  const tag = "memory-records-manual-snapshot";
+  let active = false;
+  try {
+    await activateKeepAwakeAsync(tag).then(() => { active = true; }).catch(() => {});
+    return await operation();
+  } finally {
+    if (active) await deactivateKeepAwake(tag).catch(() => {});
+  }
+}
+
 export default function SettingsScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
@@ -76,6 +91,10 @@ export default function SettingsScreen() {
   const { records, knownTags, addTag, deleteTag, importRecords } = useRecords();
   const { settings, updateSettings } = useSettings();
   const isSnapshotTestBuild = Constants.expoConfig?.extra?.snapshotTestBuild === true;
+  // Expo Go is the only runtime whose files live beside older ExperienceData scopes.
+  // StoreClient also includes dev builds, so appOwnership is needed to distinguish Expo Go.
+  const canRecoverPreviousExpoGoData =
+    Platform.OS === "android" && Constants.appOwnership === "expo";
   const advanceSnapshotTestDate = async (days: number) => {
     const current = settings.snapshotTestDate
       ? new Date(settings.snapshotTestDate)
@@ -84,6 +103,7 @@ export default function SettingsScreen() {
     await updateSettings({ snapshotTestDate: current.toISOString() });
   };
   const handleResetSnapshotTestHistory = () => {
+    if (!ensureSnapshotIdle()) return;
     Alert.alert(
       "Reset snapshot history?",
       "Every local snapshot and its vaulted snapshot media will be permanently deleted. Memories, tags, and settings will remain. This cannot be undone.",
@@ -98,9 +118,10 @@ export default function SettingsScreen() {
               try {
                 await resetSnapshotTestHistory();
                 await refreshLocalSnapshots();
+                DeviceEventEmitter.emit("localSnapshotChanged", { invalidateAutomaticCheck: true });
                 Alert.alert(
                   "Snapshot history reset",
-                  "The existing memories and settings were kept. Leave the app open briefly to create a fresh baseline snapshot.",
+                  "The existing memories and settings were kept. Leave the Memories screen open for two quiet minutes, or use Create snapshot now.",
                 );
               } catch (error) {
                 Alert.alert("Snapshot history reset failed", String(error));
@@ -135,8 +156,23 @@ export default function SettingsScreen() {
   const [localSnapshots, setLocalSnapshots] = useState<SnapshotSummary[]>([]);
   const [snapshotStatus, setSnapshotStatus] = useState<SnapshotStatus | null>(null);
   const [snapshotBusy, setSnapshotBusy] = useState(false);
+  const [automaticSnapshotRunning, setAutomaticSnapshotRunning] = useState(isLocalSnapshotOperationActive);
+  const [snapshotOperationProgress, setSnapshotOperationProgress] = useState<SnapshotProgress | null>(null);
   const [snapshotRestoreProgress, setSnapshotRestoreProgress] = useState<SnapshotProgress | null>(null);
   const settingsFocusedRef = React.useRef(false);
+
+  useEffect(() => {
+    const subscription = DeviceEventEmitter.addListener("localSnapshotOperationStatus", setAutomaticSnapshotRunning);
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    DeviceEventEmitter.emit(
+      "localSnapshotAutomaticBlocked",
+      snapshotBusy || completeBackupBusy || recoveringPreviousData || importing || exportingToObsidian || importModalVisible,
+    );
+    return () => { DeviceEventEmitter.emit("localSnapshotAutomaticBlocked", false); };
+  }, [snapshotBusy, completeBackupBusy, recoveringPreviousData, importing, exportingToObsidian, importModalVisible]);
 
   useFocusEffect(
     useCallback(() => {
@@ -155,8 +191,7 @@ export default function SettingsScreen() {
     } catch (error) {
       console.warn("[LocalSnapshots] status failed:", error);
     }
-    // Let the success timestamp render before the more expensive operation
-    // verifies every retained media blob for Snapshot History.
+    // Let the success timestamp render before reading history metadata.
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     try {
       setLocalSnapshots(await listLocalSnapshots());
@@ -232,7 +267,17 @@ export default function SettingsScreen() {
     })();
   }, []);
 
+  const ensureSnapshotIdle = () => {
+    if (!snapshotBusy && !isLocalSnapshotOperationActive()) return true;
+    Alert.alert(
+      "Snapshot work is running",
+      "Please wait for snapshot verification to finish before starting another backup, restore, import, or cleanup. You can still create and edit memories.",
+    );
+    return false;
+  };
+
   const handleExport = async () => {
+    if (!ensureSnapshotIdle()) return;
     try {
       const now = new Date();
       const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -272,6 +317,7 @@ export default function SettingsScreen() {
   };
 
   const handleCreateCompleteBackup = async () => {
+    if (!ensureSnapshotIdle()) return;
     if (Platform.OS !== "android") {
       Alert.alert(
         "Android folder backup",
@@ -316,6 +362,7 @@ export default function SettingsScreen() {
   };
 
   const performCompleteRestore = async (inspection: CompleteBackupInspection) => {
+    if (!ensureSnapshotIdle()) return;
     setCompleteBackupBusy(true);
     setCompleteBackupOperation("restore");
     let stagedRestore: Awaited<ReturnType<typeof restoreCompleteBackup>> | null = null;
@@ -362,6 +409,7 @@ export default function SettingsScreen() {
   };
 
   const handleRestoreCompleteBackup = async () => {
+    if (!ensureSnapshotIdle()) return;
     if (Platform.OS !== "android") {
       Alert.alert(
         "Android folder restore",
@@ -406,6 +454,7 @@ export default function SettingsScreen() {
   };
 
   const performPreviousDataRecovery = async (candidates: ExpoRecoveryCandidate[]) => {
+    if (!ensureSnapshotIdle()) return;
     setRecoveringPreviousData(true);
     try {
       const recoveredById = new Map<string, MemoryRecord>();
@@ -551,6 +600,7 @@ export default function SettingsScreen() {
   };
 
   const handleImportConfirm = async () => {
+    if (!ensureSnapshotIdle()) return;
     Keyboard.dismiss();
     setImporting(true);
     try {
@@ -566,6 +616,7 @@ export default function SettingsScreen() {
   };
 
   const handlePickJsonFile = async () => {
+    if (!ensureSnapshotIdle()) return;
     try {
       const result = await DocumentPicker.getDocumentAsync({
         type: ["application/json", "text/plain", "text/json", "*/*"],
@@ -667,6 +718,7 @@ export default function SettingsScreen() {
   };
 
   const handleObsidianImport = async () => {
+    if (!ensureSnapshotIdle()) return;
     try {
       // Use DocumentPicker on all platforms — consistent, reliable, and works
       // correctly on Samsung Galaxy where the SAF folder picker was resetting
@@ -700,6 +752,7 @@ export default function SettingsScreen() {
   };
 
   const handleExportAllToObsidian = async () => {
+    if (!ensureSnapshotIdle()) return;
     if (exportingToObsidian) return;
     if (records.length === 0) {
       Alert.alert("Nothing to export", "No records found.");
@@ -859,6 +912,7 @@ export default function SettingsScreen() {
   };
 
   const handleRestoreLocalSnapshot = (snapshot: SnapshotSummary) => {
+    if (!ensureSnapshotIdle()) return;
     Alert.alert(
       "Restore local snapshot?",
       `${new Date(snapshot.createdAt).toLocaleString()}\n\n${snapshot.recordCount} records and ${snapshot.mediaCount} media files will be staged and verified. Matching IDs will be replaced; unrelated current records stay.`,
@@ -933,7 +987,26 @@ export default function SettingsScreen() {
     );
   };
 
+  const handleCreateLocalSnapshot = async () => {
+    if (!ensureSnapshotIdle()) return;
+    setSnapshotBusy(true);
+    setSnapshotOperationProgress({ stage: "Preparing local snapshot", current: 0, total: records.length });
+    try {
+      await withSnapshotWakeLock(() =>
+        createLocalSnapshot(records, knownTags, settings, setSnapshotOperationProgress));
+      await refreshLocalSnapshots();
+      DeviceEventEmitter.emit("localSnapshotChanged", { invalidateAutomaticCheck: true });
+      Alert.alert("Snapshot created", "A verified device-only snapshot is ready. This does not replace a portable Complete backup.");
+    } catch (error) {
+      Alert.alert("Could not create snapshot", String(error));
+    } finally {
+      setSnapshotOperationProgress(null);
+      setSnapshotBusy(false);
+    }
+  };
+
   const handleDeleteLocalSnapshot = (snapshot: SnapshotSummary) => {
+    if (!ensureSnapshotIdle()) return;
     Alert.alert(
       "Delete local snapshot?",
       `${new Date(snapshot.createdAt).toLocaleString()}\n\nThis restore point will be removed. Other retained snapshots are not affected.`,
@@ -945,12 +1018,15 @@ export default function SettingsScreen() {
           onPress: () => {
             (async () => {
               setSnapshotBusy(true);
+              setSnapshotOperationProgress({ stage: "Checking snapshot history", current: 0, total: 0 });
               try {
-                await deleteLocalSnapshot(snapshot.id);
+                await withSnapshotWakeLock(() => deleteLocalSnapshot(snapshot.id, setSnapshotOperationProgress));
                 await refreshLocalSnapshots();
+                DeviceEventEmitter.emit("localSnapshotChanged", { invalidateAutomaticCheck: true });
               } catch (error) {
                 Alert.alert("Could not delete snapshot", String(error));
               } finally {
+                setSnapshotOperationProgress(null);
                 setSnapshotBusy(false);
               }
             })().catch(() => {});
@@ -1000,6 +1076,7 @@ export default function SettingsScreen() {
   };
 
   const handleResetAllData = () => {
+    if (!ensureSnapshotIdle()) return;
     Alert.alert(
       "Reset All Data",
       "This will permanently delete all records, tags, and settings. This cannot be undone.",
@@ -1658,6 +1735,12 @@ export default function SettingsScreen() {
           )}
         </View>
 
+        {/* App lock */}
+        <View style={s.section}>
+          <Text style={s.sectionTitle}>App Security</Text>
+          <AppLockSettings />
+        </View>
+
         {/* Verified local snapshots */}
         <View style={s.section}>
           <Text style={s.sectionTitle}>Local Snapshot History</Text>
@@ -1699,7 +1782,7 @@ export default function SettingsScreen() {
           <View style={s.infoBox}>
             <Text style={s.infoTitle}>Balanced device-only protection</Text>
             <Text style={s.infoText}>
-              Automatic snapshots run at most once per local calendar day, only after records, tags, or settings change. Retention keeps 7 daily, 4 weekly, and 3 monthly restore points. Snapshots stay on this device; media is deduplicated in a verified local vault.
+              Automatic snapshots run at most once per local calendar day, only after records, tags, or settings change. They wait for two quiet minutes on the Memories screen and do not start during capture, import, restore, or export. Retention keeps 7 daily, 4 weekly, and 3 monthly restore points. Snapshots stay on this device; media is deduplicated in a verified local vault.
             </Text>
           </View>
           <View style={[s.card, { marginTop: 10 }]}>
@@ -1716,11 +1799,11 @@ export default function SettingsScreen() {
               <View style={{ flex: 1, gap: 2 }}>
                 <Text style={s.rowLabel}>Automatic snapshots</Text>
                 <Text style={[s.rowValue, { fontSize: 12 }]}>
-                  {settings.automaticSnapshotsEnabled ? "Enabled after the app becomes idle in the foreground" : "Disabled"}
+                  {settings.automaticSnapshotsEnabled ? "Enabled after two quiet minutes on the Memories screen" : "Disabled"}
                 </Text>
               </View>
             </Pressable>
-            <View style={s.row}>
+            <View style={[s.row, s.rowBorder]}>
               <Feather name="shield" size={17} color={colors.primary} />
               <View style={{ flex: 1, gap: 2 }}>
                 <Text style={s.rowLabel}>Last successful snapshot</Text>
@@ -1738,11 +1821,49 @@ export default function SettingsScreen() {
                 ) : null}
               </View>
             </View>
+            <Pressable
+              style={s.row}
+              onPress={handleCreateLocalSnapshot}
+              disabled={snapshotBusy || automaticSnapshotRunning || Platform.OS === "web"}
+              accessibilityLabel="Create local snapshot now"
+              testID="create-local-snapshot-now"
+            >
+              <Feather name="save" size={17} color={colors.primary} />
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={s.rowLabel}>Create snapshot now</Text>
+                <Text style={[s.rowValue, { fontSize: 12 }]}>
+                  {automaticSnapshotRunning ? "An automatic snapshot is running" : "Create a verified device-only restore point without waiting"}
+                </Text>
+              </View>
+            </Pressable>
           </View>
+          {snapshotOperationProgress ? (
+            <View style={[s.infoBox, { marginTop: 10 }]} accessibilityRole="progressbar">
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={[s.infoTitle, { flex: 1 }]}>{snapshotOperationProgress.stage}</Text>
+              </View>
+              {snapshotOperationProgress.total > 0 ? (
+                <>
+                  <Text style={s.infoText}>
+                    {snapshotOperationProgress.unit === "bytes"
+                      ? `${formatBytes(snapshotOperationProgress.current)} of ${formatBytes(snapshotOperationProgress.total)}`
+                      : `${snapshotOperationProgress.current} of ${snapshotOperationProgress.total}`}
+                  </Text>
+                  <View style={s.progressTrack}>
+                    <View style={[s.progressFill, {
+                      width: `${Math.min(100, Math.max(0, snapshotOperationProgress.current / snapshotOperationProgress.total * 100))}%`,
+                    }]} />
+                  </View>
+                </>
+              ) : null}
+              <Text style={s.infoText}>Keep the app open. You can continue using Memory Records.</Text>
+            </View>
+          ) : null}
           <View style={{ height: 10 }} />
           {localSnapshots.length === 0 ? (
             <View style={s.infoBox}>
-              <Text style={s.infoText}>No retained snapshots yet. Keep the app open briefly after creating or editing a memory.</Text>
+              <Text style={s.infoText}>No retained snapshots yet. Leave the Memories screen open for two quiet minutes after a change, or use Create snapshot now.</Text>
             </View>
           ) : (
             <View style={s.card}>
@@ -2138,20 +2259,22 @@ export default function SettingsScreen() {
               </View>
               <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
             </Pressable>
-            <Pressable
-              style={[s.row, s.rowBorder, recoveringPreviousData && { opacity: 0.55 }]}
-              onPress={handlePreviousDataRecovery}
-              disabled={recoveringPreviousData}
-            >
-              <Feather name="rotate-ccw" size={18} color={colors.primary} />
-              <View style={{ flex: 1 }}>
-                <Text style={s.rowLabel}>
-                  {recoveringPreviousData ? "Scanning previous app data…" : "Recover previous Expo Go data"}
-                </Text>
-                <Text style={s.rowValue}>One-time recovery after an SDK or project update</Text>
-              </View>
-              <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
-            </Pressable>
+            {canRecoverPreviousExpoGoData && (
+              <Pressable
+                style={[s.row, s.rowBorder, recoveringPreviousData && { opacity: 0.55 }]}
+                onPress={handlePreviousDataRecovery}
+                disabled={recoveringPreviousData}
+              >
+                <Feather name="rotate-ccw" size={18} color={colors.primary} />
+                <View style={{ flex: 1 }}>
+                  <Text style={s.rowLabel}>
+                    {recoveringPreviousData ? "Scanning previous app data…" : "Recover previous Expo Go data"}
+                  </Text>
+                  <Text style={s.rowValue}>One-time recovery after an SDK or project update</Text>
+                </View>
+                <Feather name="chevron-right" size={18} color={colors.mutedForeground} />
+              </Pressable>
+            )}
             <Pressable style={[s.row, s.rowBorder]} onPress={handleExport}>
               <Feather name="upload" size={18} color={colors.primary} />
               <Text style={s.rowLabel}>Export JSON backup</Text>

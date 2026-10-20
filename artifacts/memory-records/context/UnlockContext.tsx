@@ -89,10 +89,9 @@ export function UnlockProvider({ children }: { children: React.ReactNode }) {
           return { ok: true };
         }
 
-        // Compatibility with the currently published API, which predates the
-        // email-matching endpoint. Earlier PayPal payments may already have
-        // unlocked this device through the original IPN flow.
-        if (res.status === 404 && !data) {
+        // Compatibility with a published API that predates email matching.
+        // Any existing server-side unlock for this device is still recoverable.
+        if (res.status === 404) {
           const statusRes = await fetch(
             `${API_SERVER_URL}/api/unlock/status/${encodeURIComponent(deviceToken)}?_=${Date.now()}`,
             { cache: "no-store" },
@@ -103,10 +102,18 @@ export function UnlockProvider({ children }: { children: React.ReactNode }) {
             await setSecureItem(UNLOCK_STORE_KEY, String(Date.now()));
             return { ok: true };
           }
-          return {
-            ok: false,
-            error: "Email payment checks are not available until the server update is published",
-          };
+          const serverMessage = data?.error?.trim() ?? "";
+          if (
+            !serverMessage ||
+            /not[\s_-]*found|cannot post|no route|unknown endpoint|not available/i.test(serverMessage)
+          ) {
+            return {
+              ok: false,
+              error:
+                "Email-based payment recovery is not available on the published server yet. Publish the latest API update, then try again.",
+            };
+          }
+          return { ok: false, error: serverMessage };
         }
 
         return { ok: false, error: data?.error ?? "Payment not found" };

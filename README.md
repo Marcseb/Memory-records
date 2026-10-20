@@ -6,29 +6,31 @@ Journal your memories with photos, voice memos, and text — then archive them t
 
 ## Quick Start
 
-Three steps and you're up in under a minute.
+Three steps to create your first memory. For the private Android APK, see the
+[Android Studio build guide](artifacts/memory-records/ANDROID_BUILD.md).
 
 ---
 
 ### Step 1 — Get the app on your phone
 
-Memory Records runs inside **Expo Go**, a free app available on both platforms.
+Memory Records can be run in **Expo Go** for development. The standalone Android
+production APK is built and signed locally; this project does not currently
+publish an APK through Google Play.
 
-| Platform | Install Expo Go |
-|---|---|
-| Android | [Google Play — Expo Go](https://play.google.com/store/apps/details?id=host.exp.exponent) |
-| iOS | [App Store — Expo Go](https://apps.apple.com/app/expo-go/id982107779) |
+For Expo Go development, install Expo Go, clone this repository, and start the
+app from the workspace root:
 
-Once Expo Go is installed, open Memory Records:
-
-**On Android** — open Expo Go, tap **"Enter URL manually"** and type:
-```
-https://memory-vault-manager.replit.app
+```bash
+pnpm install
+pnpm --filter @workspace/memory-records exec expo start --go
 ```
 
-**On iOS** — open **Safari**, type that same address, and tap the prompt to open it in Expo Go.
+Scan the terminal QR code with Expo Go. Expo Go and the standalone APK keep
+separate local data; use a complete backup to move records and media between
+them.
 
-The app loads in a few seconds. You can save it to your Expo Go home screen for quick access later.
+The Snapshot Test dev-client is a separate testing app and is not the production
+APK.
 
 ---
 
@@ -69,6 +71,11 @@ Your memory is stored locally, instantly, with no upload.
 - **Emotion tags** — attach one of 22 colour-coded emotions (joy, nostalgia, gratitude, grief, etc.) to each memory. Used for grouping and filtering in the home list.
 - **Memory Year** — optionally record the year the memory is from (e.g. 1998), independently of today's date. Used for chronological sorting.
 
+On Android, if a selected photo has no readable GPS, the app may offer the
+phone's current location as an alternative. This is optional and may not be
+where the photo was taken. The Map view is temporarily disabled; saved GPS
+coordinates remain attached to memories.
+
 ---
 
 ## Sorting & browsing
@@ -84,6 +91,10 @@ The home list offers four sort modes, toggled with the pill bar at the top:
 
 Groups (Tag and Emotion modes) can be collapsed individually by tapping their header.
 
+- **Map** — temporarily disabled while an Android crash is investigated.
+  Memories can still save GPS coordinates, and existing coordinates are kept.
+- **Surprise Me** — open a random memory dated before today.
+
 ### Search
 
 Use the search field at the top of the Home tab to filter memories by note text, tag, emotion, or location. Search results expand grouped sections automatically and show the matching count. Searching for `voice-memo` finds every record with a voice memo.
@@ -97,11 +108,23 @@ In **Date** sort mode, each card shows its position within its year group as `N/
 
 The first time any note in a year is moved, all notes in that year are automatically assigned consecutive ranks based on their current display order. Ranks persist across restarts and are included in Obsidian exports (`**Year rank:** N`), so they survive a vault round-trip.
 
+## Sharing a memory
+
+On a record's detail screen, use **Share as image card** to create a card with
+the record's photo when available, or its emotion artwork otherwise, along with
+an excerpt of the note and its date. The card is shared through the phone's
+system share sheet.
+
+## App lock
+
+An optional app lock is available in Settings. It uses the device's biometric
+authentication when available and provides a PIN fallback.
+
 ---
 
 ## Unlocking Premium Features
 
-The **AI Interviewer**, **Historical Events** generator, and **Voice Memos** are grouped into a single Premium feature pack, unlocked by a one-time **€10 contribution via PayPal**. Video clips and all other core features (capturing memories, sorting, search, tags, emotions, year ranks, Obsidian export/import, JSON backup) remain free and require no payment.
+The **AI Interviewer**, **Historical Events** generator, and **Voice Memos** are grouped into a single Premium feature pack, unlocked by a one-time **€10 contribution via PayPal**. Video clips and all other core features (capturing memories, sorting, search, tags, emotions, year ranks, Surprise Me, share cards, app lock, Obsidian export/import, and backups) remain free and require no payment. The Map view is temporarily disabled.
 
 ### How to unlock
 
@@ -194,6 +217,15 @@ File names follow the format `YYYY-MM-DD[_tag][_year][_N].md` — the primary ta
 
 ## Backup & restore
 
+- **Local snapshots** — automatic, verified restore points stay on the device.
+  Automatic checks wait for two quiet foreground minutes on the Memories screen
+  and are deferred during capture, import, restore, and export. Checks with no
+  changes are silent; actual work uses non-blocking progress. Settings shows
+  history, restore/delete actions, and **Create snapshot now** for an immediate
+  verified device-only restore point. Existing daily retention is unchanged.
+- **Complete-backup reminder** — the app recommends a new complete backup
+  after 30 days or 25 distinct memory changes, whichever comes first. The
+  reminder can be snoozed for seven days and reappears after a restore.
 - **Complete backup (Android)** — creates one dated `.mrbak` archive containing records, tags, app settings, and every accessible photo, video, thumbnail, and voice memo. Media streams in bounded chunks and each entry carries size and integrity data.
 - **Complete restore (Android)** — select a `.mrbak` archive. The app strictly validates its manifest, restores and verifies media in a staging directory, then merges records without deleting unrelated records.
 - **JSON export** — tap Export in Settings. On **Android** a folder picker opens so you can save directly to Documents, Downloads, an SD card folder, or Google Drive. On **iOS** the share sheet appears with a "Save to Files" option. The file is named `memory-records-backup-YYYY-MM-DD.json` and contains all records and tags in a readable, pretty-printed format. Photo, video, and voice memo references are stored as local file paths (not embedded media data).
@@ -201,6 +233,10 @@ File names follow the format `YYYY-MM-DD[_tag][_year][_N].md` — the primary ta
 - **Import from Obsidian** — reimport previously saved Memory Records notes from your vault. On both Android and iOS, a file picker lets you navigate to your vault folder and select one or more `.md` files. Android users: in the picker, tap the **☰ menu → Internal storage**, then find `Obsidian → [vault] → Memory Records`.
 
 > Use complete backups when you need to protect recordings and other media. Keep JSON exports as an additional lightweight, human-readable safeguard. Secure AI keys and payment/unlock credentials are deliberately excluded from both backup formats.
+
+**Previous Expo Go data recovery (Android)** is available only while running in
+Expo Go. It can scan older Expo Go storage scopes on the same phone after an SDK
+or project change. The standalone APK cannot access those Expo Go folders.
 
 ---
 
@@ -228,16 +264,18 @@ Memory Records is free and open-source. If it saves you time or brings you joy, 
 git clone https://github.com/Marcseb/Memory-records.git
 cd Memory-records
 pnpm install
-pnpm --filter @workspace/memory-records run dev
+pnpm --filter @workspace/memory-records exec expo start --go
 ```
 
-Scan the QR code shown in the terminal with Expo Go.
+Scan the QR code shown in the terminal with Expo Go. For a signed Android
+production APK, follow the [private APK build guide](artifacts/memory-records/ANDROID_BUILD.md).
 
 ---
 
 ## Privacy & security
 
 - **All data stays on your device.** Records, photos, videos, voice memos, tags, and settings are stored in your phone's local document directory (`FileSystem.documentDirectory`). Nothing is uploaded to any server unless you explicitly use an AI feature or share/export data.
+- **Optional app lock.** Protect access with device biometrics or a PIN fallback.
 - **Encrypted key storage.** AI API keys are stored using the device's secure enclave (expo-secure-store), the same mechanism used by banking apps. They are never written to plain storage.
 - **Local authentication.** Your login credentials are stored locally on this device and are never sent to a remote server.
 - **AI calls are direct.** When the AI Interviewer or Historical Events generator is active, your requests go directly from your device to Mistral or OpenAI using your own key — no intermediary server reads them.
@@ -250,7 +288,7 @@ Scan the QR code shown in the terminal with Expo Go.
 
 | Layer | Technology |
 |---|---|
-| Mobile app | Expo SDK 54 / React Native |
+| Mobile app | Expo SDK 57 / React Native |
 | Routing | expo-router |
 | Local storage | FileSystem.documentDirectory (expo-file-system/legacy) |
 | Secure storage | expo-secure-store (device secure enclave) |

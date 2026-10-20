@@ -7,7 +7,7 @@ import {
 } from "@expo-google-fonts/inter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
-import { router, Stack } from "expo-router";
+import { router, Stack, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useCallback, useEffect, useState } from "react";
 import {
@@ -15,7 +15,7 @@ import {
   Alert,
   AppState,
   DeviceEventEmitter,
-  Modal,
+  Keyboard,
   Platform,
   StyleSheet,
   Text,
@@ -23,14 +23,17 @@ import {
 } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { AppSplash } from "@/components/AppSplash";
+import { AppLockScreen } from "@/components/AppLock";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { AppLockProvider, useAppLock } from "@/context/AppLockContext";
 import { AuthProvider } from "@/context/AuthContext";
 import { RecordsProvider } from "@/context/RecordsContext";
 import { SettingsProvider } from "@/context/SettingsContext";
 import { UnlockProvider } from "@/context/UnlockContext";
+import { useColors } from "@/hooks/useColors";
 import { useRecords } from "@/context/RecordsContext";
 import { useSettings } from "@/context/SettingsContext";
 import {
@@ -41,11 +44,13 @@ import {
   getCompleteBackupReminderStatus,
   snoozeCompleteBackupReminder,
 } from "@/utils/completeBackupReminder";
+import { isSnapshotHomeRoute, snapshotIdleDelay } from "@/utils/snapshotScheduling";
 
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 const SNAPSHOT_WAKE_LOCK = "memory-records-local-snapshot";
+const SNAPSHOT_ACTIVITY_EVENT = "localSnapshotUserActivity";
 
 function RootLayoutNav() {
   return (
@@ -55,6 +60,33 @@ function RootLayoutNav() {
       <Stack.Screen name="record/[id]" options={{ headerShown: false }} />
       <Stack.Screen name="help" options={{ presentation: "modal", headerShown: false }} />
     </Stack>
+  );
+}
+
+function AppRuntime({
+  splashDone,
+  onSplashDone,
+}: {
+  splashDone: boolean;
+  onSplashDone: () => void;
+}) {
+  const { isReady: lockReady, isEnabled, isLocked } = useAppLock();
+  const unlocked = lockReady && (!isEnabled || !isLocked);
+
+  return (
+    <>
+      {lockReady ? <RootLayoutNav /> : null}
+      {lockReady ? (
+        <LocalSnapshotManager enabled={splashDone && unlocked} />
+      ) : null}
+      {lockReady ? (
+        <CompleteBackupReminderManager enabled={splashDone && unlocked} />
+      ) : null}
+      {lockReady ? <AppLockScreen active={splashDone} /> : null}
+      {!splashDone || !lockReady ? (
+        <AppSplash onDone={onSplashDone} />
+      ) : null}
+    </>
   );
 }
 
@@ -109,9 +141,26 @@ function CompleteBackupReminderManager({ enabled }: { enabled: boolean }) {
 function LocalSnapshotManager({ enabled }: { enabled: boolean }) {
   const { records, knownTags, isLoading } = useRecords();
   const { settings, isLoading: settingsLoading } = useSettings();
+  const colors = useColors();
+  const insets = useSafeAreaInsets();
+  const segments = useSegments();
+  const isMemoriesScreen = isSnapshotHomeRoute(segments);
   const running = React.useRef(false);
   const ready = React.useRef(false);
-  const foregroundRef = React.useRef(true);
+  const foregroundRef = React.useRef(AppState.currentState === "active");
+  const eligibleRef = React.useRef(false);
+  const blockedRef = React.useRef(false);
+  const keyboardVisibleRef = React.useRef(Keyboard.isVisible());
+  const touchActiveRef = React.useRef(false);
+  const lastActivityAt = React.useRef(Date.now());
+  const activityVersion = React.useRef(0);
+  const scheduleRef = React.useRef<() => void>(() => {});
+  const lastChecked = React.useRef<{
+    records: typeof records;
+    tags: typeof knownTags;
+    settings: typeof settings;
+    day: string;
+  } | null>(null);
   const recordsRef = React.useRef(records);
   const tagsRef = React.useRef(knownTags);
   const settingsRef = React.useRef(settings);
@@ -120,33 +169,59 @@ function LocalSnapshotManager({ enabled }: { enabled: boolean }) {
   recordsRef.current = records;
   tagsRef.current = knownTags;
   settingsRef.current = settings;
+  eligibleRef.current = enabled && isMemoriesScreen;
 
   const run = useCallback(() => {
     const latestSettings = settingsRef.current;
     if (
       Platform.OS === "web" ||
       !foregroundRef.current ||
+      !eligibleRef.current ||
+      blockedRef.current ||
+      keyboardVisibleRef.current ||
+      touchActiveRef.current ||
       !ready.current ||
       !latestSettings.automaticSnapshotsEnabled ||
       running.current
     ) return;
+    const inputs = {
+      records: recordsRef.current,
+      tags: tagsRef.current,
+      settings: settingsRef.current,
+      day: new Date().toDateString(),
+    };
+    const previous = lastChecked.current;
+    if (previous && previous.records === inputs.records && previous.tags === inputs.tags &&
+        previous.settings === inputs.settings && previous.day === inputs.day) return;
     console.info("[LocalSnapshots] Foreground snapshot check started.");
     running.current = true;
-    setProgress({ stage: "Checking for changes", current: 0, total: recordsRef.current.length });
+    DeviceEventEmitter.emit("localSnapshotOperationStatus", true);
+    const activityAtStart = activityVersion.current;
     void (async () => {
       let wakeLockActive = false;
+      let wakeLockStart: Promise<void> | null = null;
       try {
-        await activateKeepAwakeAsync(SNAPSHOT_WAKE_LOCK);
-        wakeLockActive = true;
-        await maybeCreateAutomaticSnapshot(
+        const status = await maybeCreateAutomaticSnapshot(
           recordsRef.current,
           tagsRef.current,
           latestSettings,
-          setProgress,
+          (nextProgress) => {
+            // Unchanged-data checks are silent. Only actual snapshot work
+            // gets a status banner and an active-operation wake lock.
+            if (nextProgress.stage === "Checking for changes") return;
+            setProgress(nextProgress);
+            if (!wakeLockStart) {
+              wakeLockStart = activateKeepAwakeAsync(SNAPSHOT_WAKE_LOCK)
+                .then(() => { wakeLockActive = true; })
+                .catch((error) => console.warn("[LocalSnapshots] wake lock unavailable:", error));
+            }
+          },
         );
+        if (!status.lastError) lastChecked.current = inputs;
       } catch (error) {
         console.warn("[LocalSnapshots] foreground check failed:", error);
       } finally {
+        if (wakeLockStart) await wakeLockStart;
         if (wakeLockActive) {
           await deactivateKeepAwake(SNAPSHOT_WAKE_LOCK).catch((error) =>
             console.warn("[LocalSnapshots] wake lock release failed:", error));
@@ -155,40 +230,85 @@ function LocalSnapshotManager({ enabled }: { enabled: boolean }) {
     })()
       .finally(() => {
         running.current = false;
+        DeviceEventEmitter.emit("localSnapshotOperationStatus", false);
         setProgress(null);
         DeviceEventEmitter.emit("localSnapshotChanged");
+        if (activityVersion.current !== activityAtStart) scheduleRef.current();
       });
   }, []);
 
   const schedule = useCallback(() => {
-    if (
-      !enabled ||
-      Platform.OS === "web" ||
-      timerRef.current ||
-      running.current
-    ) return;
-    console.info("[LocalSnapshots] Foreground snapshot check scheduled.");
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    const remaining = snapshotIdleDelay({
+      eligible: eligibleRef.current && Platform.OS !== "web",
+      blocked: blockedRef.current || keyboardVisibleRef.current || touchActiveRef.current,
+      foreground: foregroundRef.current,
+      ready: ready.current,
+      automaticEnabled: settingsRef.current.automaticSnapshotsEnabled,
+      running: running.current,
+      lastActivityAt: lastActivityAt.current,
+    });
+    if (remaining === null) return;
     timerRef.current = setTimeout(() => {
       timerRef.current = null;
       if (foregroundRef.current) run();
-    }, 2500);
-  }, [enabled, run]);
+    }, remaining);
+  }, [run]);
+  scheduleRef.current = schedule;
 
   useEffect(() => {
-    if (enabled && !isLoading && !settingsLoading) {
-      ready.current = true;
-      schedule();
-    }
-  }, [enabled, isLoading, schedule, settingsLoading]);
+    ready.current = enabled && !isLoading && !settingsLoading;
+    lastActivityAt.current = Date.now();
+    schedule();
+  }, [enabled, isLoading, isMemoriesScreen, schedule, settingsLoading]);
 
   useEffect(() => {
-    if (ready.current) schedule();
+    lastActivityAt.current = Date.now();
+    activityVersion.current += 1;
+    schedule();
   }, [knownTags, records, schedule, settings]);
 
   useEffect(() => {
+    const activitySubscription = DeviceEventEmitter.addListener(SNAPSHOT_ACTIVITY_EVENT, (touchActive: boolean) => {
+      touchActiveRef.current = touchActive;
+      lastActivityAt.current = Date.now();
+      activityVersion.current += 1;
+      schedule();
+    });
+    const keyboardShown = Keyboard.addListener("keyboardDidShow", () => {
+      keyboardVisibleRef.current = true;
+      schedule();
+    });
+    const keyboardHidden = Keyboard.addListener("keyboardDidHide", () => {
+      keyboardVisibleRef.current = false;
+      lastActivityAt.current = Date.now();
+      schedule();
+    });
+    const blockerSubscription = DeviceEventEmitter.addListener("localSnapshotAutomaticBlocked", (blocked: boolean) => {
+      blockedRef.current = blocked;
+      lastActivityAt.current = Date.now();
+      schedule();
+    });
+    const changedSubscription = DeviceEventEmitter.addListener(
+      "localSnapshotChanged",
+      (change?: { invalidateAutomaticCheck?: boolean }) => {
+        if (!change?.invalidateAutomaticCheck) return;
+        lastChecked.current = null;
+        lastActivityAt.current = Date.now();
+        schedule();
+      },
+    );
     const subscription = AppState.addEventListener("change", (state) => {
       foregroundRef.current = state === "active";
-      if (state === "active" && ready.current) schedule();
+      keyboardVisibleRef.current = state === "active" && Keyboard.isVisible();
+      if (state !== "active") touchActiveRef.current = false;
+      if (state === "active") {
+        lastActivityAt.current = Date.now();
+        schedule();
+      }
       if (state !== "active" && timerRef.current) {
         clearTimeout(timerRef.current);
         timerRef.current = null;
@@ -196,65 +316,60 @@ function LocalSnapshotManager({ enabled }: { enabled: boolean }) {
     });
     return () => {
       subscription.remove();
+      activitySubscription.remove();
+      blockerSubscription.remove();
+      changedSubscription.remove();
+      keyboardShown.remove();
+      keyboardHidden.remove();
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [schedule]);
 
-  if (!progress) return null;
+  if (!progress || !enabled || !isMemoriesScreen) return null;
   const ratio = progress.total > 0 ? progress.current / progress.total : 0;
   return (
-    <Modal visible transparent animationType="fade" statusBarTranslucent>
-      <View style={snapshotStyles.overlay} pointerEvents="none">
-        <View style={snapshotStyles.card}>
-          <ActivityIndicator size="large" color="#8b5cf6" />
-          <Text style={snapshotStyles.title}>Protecting your memories</Text>
-          <Text style={snapshotStyles.stage}>{progress.stage}</Text>
-          {progress.total > 0 && (
-            <>
-              <View style={snapshotStyles.track}>
-                <View style={[snapshotStyles.fill, { width: `${Math.max(3, ratio * 100)}%` }]} />
-              </View>
-              <Text style={snapshotStyles.count}>
-                {progress.current} of {progress.total}
-              </Text>
-            </>
-          )}
-          <Text style={snapshotStyles.note}>Keep the app open until this finishes.</Text>
+    <View style={[snapshotStyles.overlay, { top: insets.top + 8 }]} pointerEvents="none">
+      <View
+        style={[snapshotStyles.card, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}
+        accessibilityRole="progressbar"
+        accessibilityLabel={`Local snapshot: ${progress.stage}`}
+      >
+        <ActivityIndicator size="small" color={colors.primary} />
+        <View style={{ flex: 1 }}>
+          <Text style={[snapshotStyles.title, { color: colors.foreground }]}>Protecting your memories</Text>
+          <Text style={[snapshotStyles.stage, { color: colors.mutedForeground }]}>{progress.stage}</Text>
+          <View style={[snapshotStyles.track, { backgroundColor: colors.border }]}>
+            <View style={[snapshotStyles.fill, { backgroundColor: colors.primary, width: `${Math.min(100, Math.max(3, ratio * 100))}%` }]} />
+          </View>
         </View>
       </View>
-    </Modal>
+    </View>
   );
 }
 
 const snapshotStyles = StyleSheet.create({
   overlay: {
-    flex: 1,
+    position: "absolute",
+    left: 0,
+    right: 0,
     paddingHorizontal: 16,
-    paddingBottom: 28,
     alignItems: "center",
-    justifyContent: "flex-end",
-    backgroundColor: "rgba(8,8,16,0.28)",
   },
   card: {
     width: "100%",
     maxWidth: 430,
-    padding: 18,
-    borderRadius: 18,
-    backgroundColor: "#242238",
+    padding: 12,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
+    flexDirection: "row",
+    gap: 12,
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.3,
-    shadowRadius: 14,
-    elevation: 8,
+    elevation: 3,
   },
-  title: { marginTop: 10, color: "#fff", fontFamily: "Inter_600SemiBold", fontSize: 17 },
-  stage: { marginTop: 5, color: "rgba(255,255,255,0.72)", fontFamily: "Inter_400Regular", fontSize: 13 },
-  track: { height: 7, width: "100%", marginTop: 14, borderRadius: 4, overflow: "hidden", backgroundColor: "rgba(255,255,255,0.12)" },
-  fill: { height: "100%", borderRadius: 4, backgroundColor: "#8b5cf6" },
-  count: { marginTop: 7, color: "rgba(255,255,255,0.62)", fontFamily: "Inter_500Medium", fontSize: 12 },
-  note: { marginTop: 9, color: "rgba(255,255,255,0.5)", fontFamily: "Inter_400Regular", fontSize: 12 },
+  title: { fontFamily: "Inter_600SemiBold", fontSize: 13 },
+  stage: { marginTop: 3, fontFamily: "Inter_400Regular", fontSize: 12 },
+  track: { height: 3, width: "100%", marginTop: 7, borderRadius: 3, overflow: "hidden" },
+  fill: { height: "100%", borderRadius: 3 },
 });
 
 export default function RootLayout() {
@@ -281,16 +396,24 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
-          <GestureHandlerRootView style={{ flex: 1 }}>
+          <GestureHandlerRootView
+            style={{ flex: 1 }}
+            onTouchStart={() => DeviceEventEmitter.emit(SNAPSHOT_ACTIVITY_EVENT, true)}
+            onTouchMove={() => DeviceEventEmitter.emit(SNAPSHOT_ACTIVITY_EVENT, true)}
+            onTouchEnd={(event) => DeviceEventEmitter.emit(SNAPSHOT_ACTIVITY_EVENT, (event.nativeEvent.touches?.length ?? 0) > 0)}
+            onTouchCancel={() => DeviceEventEmitter.emit(SNAPSHOT_ACTIVITY_EVENT, false)}
+          >
             <KeyboardProvider>
               <AuthProvider>
                 <UnlockProvider>
                   <SettingsProvider>
                     <RecordsProvider>
-                      <RootLayoutNav />
-                      <LocalSnapshotManager enabled={splashDone} />
-                      <CompleteBackupReminderManager enabled={splashDone} />
-                      {!splashDone && <AppSplash onDone={handleSplashDone} />}
+                      <AppLockProvider>
+                        <AppRuntime
+                          splashDone={splashDone}
+                          onSplashDone={handleSplashDone}
+                        />
+                      </AppLockProvider>
                     </RecordsProvider>
                   </SettingsProvider>
                 </UnlockProvider>

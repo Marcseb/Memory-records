@@ -1,6 +1,7 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import * as ImagePicker from "expo-image-picker";
+import * as Location from "expo-location";
 import {
   copyImageToAppStorage,
   copyThumbnailToAppStorage,
@@ -35,7 +36,11 @@ import { useInterview, ContextNote } from "@/hooks/useInterview";
 import { useColors } from "@/hooks/useColors";
 import { useUnlock } from "@/context/UnlockContext";
 import { UnlockModal } from "@/components/UnlockModal";
-import { readGpsFromJpeg, readGpsFromOriginalFile } from "@/utils/exif-gps";
+import {
+  readGpsFromGalleryAsset,
+  readGpsFromJpeg,
+  readGpsFromOriginalFile,
+} from "@/utils/exif-gps";
 
 interface PhotoData {
   uri: string;
@@ -201,7 +206,75 @@ export default function NewRecordScreen() {
   const yearInputRef = useRef<TextInput>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [audioUri, setAudioUri] = useState<string | undefined>(undefined);
+  const audioUriRef = useRef<string | undefined>(undefined);
   const currentYear = new Date().getFullYear();
+
+  const offerCurrentLocationFallback = (imageUri: string) => {
+    Alert.alert(
+      "Photo location unavailable",
+      "The photo’s GPS could not be read. Use this phone’s current location instead? It may not be where the photo was taken.",
+      [
+        { text: "Not now", style: "cancel" },
+        {
+          text: "Use current location",
+          onPress: () => {
+            void (async () => {
+              try {
+                const permission = await Location.requestForegroundPermissionsAsync();
+                if (!permission.granted) {
+                  Alert.alert(
+                    "Location permission not granted",
+                    "The note was not given a location. You can allow location access in Android settings and select the photo again.",
+                  );
+                  return;
+                }
+
+                const current = await Location.getCurrentPositionAsync({
+                  accuracy: Location.Accuracy.Balanced,
+                });
+                setPhoto((currentPhoto) =>
+                  currentPhoto?.uri === imageUri
+                    ? {
+                        ...currentPhoto,
+                        lat: current.coords.latitude,
+                        lng: current.coords.longitude,
+                      }
+                    : currentPhoto,
+                );
+              } catch {
+                Alert.alert(
+                  "Current location unavailable",
+                  "Memory Records could not get the phone’s current location. The note can still be saved without a map pin.",
+                );
+              }
+            })();
+          },
+        },
+      ],
+    );
+  };
+
+  useEffect(() => {
+    return () => {
+      const pendingAudioUri = audioUriRef.current;
+      if (pendingAudioUri) deleteAppAudio(pendingAudioUri).catch(() => {});
+    };
+  }, []);
+
+  const handleAudioSaved = (uri: string) => {
+    const previousUri = audioUriRef.current;
+    audioUriRef.current = uri;
+    setAudioUri(uri);
+    if (previousUri && previousUri !== uri) {
+      deleteAppAudio(previousUri).catch(() => {});
+    }
+  };
+
+  const handleAudioDeleted = (uri: string) => {
+    if (audioUriRef.current === uri) audioUriRef.current = undefined;
+    deleteAppAudio(uri).catch(() => {});
+    setAudioUri(undefined);
+  };
 
   const commitYearInput = () => {
     const parsed = parseInt(yearInputText, 10);
@@ -282,11 +355,12 @@ export default function NewRecordScreen() {
     if (result.canceled || !result.assets?.[0]) return;
     const asset = result.assets[0];
     const exifDate = parseExifDate(asset.exif as Record<string, unknown> | null);
-    // 1. Try Expo's parsed EXIF (works on iOS).
-    // 2. Parse the cached file's raw EXIF bytes.
-    // 3. On Android, Expo zeroes GPS rationals when copying to cache — fall back
-    //    to reading the original source file from the device's DCIM directory.
+    // On Android, read the original MediaStore asset first: the picker cache
+    // copy can have zeroed GPS rationals. Keep the EXIF/file fallbacks for iOS
+    // and Android providers that do not expose a MediaStore asset ID.
+    const originalGalleryGps = await readGpsFromGalleryAsset(asset.assetId);
     const gps =
+      originalGalleryGps ??
       parseGpsFromExif(asset.exif as Record<string, unknown> | null) ??
       (await readGpsFromJpeg(asset.uri)) ??
       (await readGpsFromOriginalFile(asset.fileName));
@@ -296,6 +370,9 @@ export default function NewRecordScreen() {
     setPhoto({ uri: durableImageUri, date: exifDate, hasMetadata: !!exifDate, lat: gps?.lat, lng: gps?.lng });
     if (exifDate) setManualDate(exifDate);
     setMode("photo");
+    if (!gps && Platform.OS === "android") {
+      offerCurrentLocationFallback(durableImageUri);
+    }
   };
 
   const handleNoteMode = () => {
@@ -454,6 +531,10 @@ export default function NewRecordScreen() {
   };
 
   const handleReset = () => {
+    const pendingAudioUri = audioUriRef.current;
+    audioUriRef.current = undefined;
+    if (pendingAudioUri) deleteAppAudio(pendingAudioUri).catch(() => {});
+    setAudioUri(undefined);
     setMode(null);
     setPhoto(null);
     setVideo(null);
@@ -502,6 +583,8 @@ export default function NewRecordScreen() {
     };
 
     await addRecord(record);
+    audioUriRef.current = undefined;
+    setAudioUri(undefined);
 
     setIsSaving(false);
 
@@ -1394,14 +1477,6 @@ export default function NewRecordScreen() {
                     Photo taken: <Text style={s.metaHighlight}>{photo?.date}</Text>
                   </Text>
                 </View>
-                {photo?.lat && photo?.lng ? (
-                  <View style={s.metaRow}>
-                    <Feather name="map-pin" size={14} color={colors.primary} />
-                    <Text style={s.metaText}>
-                      GPS: <Text style={s.metaHighlight}>{photo.lat.toFixed(4)}, {photo.lng.toFixed(4)}</Text>
-                    </Text>
-                  </View>
-                ) : null}
               </View>
             ) : hasVideoDate ? (
               <View style={s.metaBox}>
@@ -1432,6 +1507,16 @@ export default function NewRecordScreen() {
                 />
               </View>
             )}
+            {photo?.lat != null && photo?.lng != null ? (
+              <View style={s.metaBox}>
+                <View style={s.metaRow}>
+                  <Feather name="map-pin" size={14} color={colors.primary} />
+                  <Text style={s.metaText}>
+                    GPS: <Text style={s.metaHighlight}>{photo.lat.toFixed(4)}, {photo.lng.toFixed(4)}</Text>
+                  </Text>
+                </View>
+              </View>
+            ) : null}
 
             {/* Memory year stepper */}
             <View style={s.yearStepperRow}>
@@ -1735,8 +1820,8 @@ export default function NewRecordScreen() {
             {isPremiumUnlocked ? (
               <VoiceMemoRecorder
                 audioUri={audioUri}
-                onSaved={(uri) => setAudioUri(uri)}
-                onDeleted={() => setAudioUri(undefined)}
+                onSaved={handleAudioSaved}
+                onDeleted={handleAudioDeleted}
               />
             ) : (
               <Pressable

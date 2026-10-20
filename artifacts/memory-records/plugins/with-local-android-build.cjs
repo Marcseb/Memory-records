@@ -1,9 +1,14 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
-const { withProjectBuildGradle, withDangerousMod } = require("expo/config-plugins");
+const {
+  withAndroidManifest,
+  withProjectBuildGradle,
+  withDangerousMod,
+} = require("expo/config-plugins");
 
 const START = "// @memory-records/local-jdk start";
 const END = "// @memory-records/local-jdk end";
+const GOOGLE_MAPS_KEY_NAME = "com.google.android.geo.API_KEY";
 const DAEMON_CRITERIA =
   "# Memory Records: use an installed JDK 17, without automatic downloads.\n" +
   "toolchainVersion=17\n";
@@ -25,12 +30,46 @@ function configureGradle(contents) {
   return `${contents.trimEnd()}\n\n${GRADLE_BLOCK}\n`;
 }
 
+function configureGoogleMapsManifest(manifest, apiKey) {
+  if (!apiKey) return manifest;
+
+  const application = manifest.manifest?.application?.[0];
+  if (!application) {
+    throw new Error("Android manifest is missing its application entry.");
+  }
+
+  const metadata = application["meta-data"] ?? (application["meta-data"] = []);
+  const existing = metadata.find(
+    (entry) => entry.$?.["android:name"] === GOOGLE_MAPS_KEY_NAME,
+  );
+  if (existing) {
+    existing.$ = { ...existing.$, "android:value": apiKey };
+  } else {
+    metadata.push({
+      $: {
+        "android:name": GOOGLE_MAPS_KEY_NAME,
+        "android:value": apiKey,
+      },
+    });
+  }
+  return manifest;
+}
+
+function normalizeGoogleMapsApiKey(apiKey) {
+  return apiKey?.trim() ?? "";
+}
+
 function withLocalAndroidBuild(config) {
   config = withProjectBuildGradle(config, (mod) => {
     if (mod.modResults.language !== "groovy") {
       throw new Error("Memory Records local Android setup currently requires a Groovy build.gradle.");
     }
     mod.modResults.contents = configureGradle(mod.modResults.contents);
+    return mod;
+  });
+  config = withAndroidManifest(config, (mod) => {
+    const apiKey = normalizeGoogleMapsApiKey(process.env.GOOGLE_MAPS_API_KEY);
+    mod.modResults = configureGoogleMapsManifest(mod.modResults, apiKey);
     return mod;
   });
   return withDangerousMod(config, [
@@ -46,4 +85,6 @@ function withLocalAndroidBuild(config) {
 
 module.exports = withLocalAndroidBuild;
 module.exports.configureGradle = configureGradle;
+module.exports.configureGoogleMapsManifest = configureGoogleMapsManifest;
+module.exports.normalizeGoogleMapsApiKey = normalizeGoogleMapsApiKey;
 module.exports.DAEMON_CRITERIA = DAEMON_CRITERIA;

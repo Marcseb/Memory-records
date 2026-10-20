@@ -86,6 +86,7 @@ export interface SnapshotProgress {
   stage: string;
   current: number;
   total: number;
+  unit?: "bytes";
 }
 
 type SnapshotProgressCallback = (progress: SnapshotProgress) => void;
@@ -100,13 +101,23 @@ export interface StagedSnapshotRestore {
 
 let snapshotInProgress = false;
 let snapshotMutationQueue: Promise<void> = Promise.resolve();
+let snapshotMutationActive = false;
 const IS_SNAPSHOT_TEST_BUILD = Constants.expoConfig?.extra?.snapshotTestBuild === true;
 export const SNAPSHOT_CHANGE_LOGIC_VERSION = 2;
 
 function runSnapshotMutation<T>(operation: () => Promise<T>): Promise<T> {
-  const result = snapshotMutationQueue.then(operation, operation);
+  const guarded = async () => {
+    snapshotMutationActive = true;
+    try { return await operation(); }
+    finally { snapshotMutationActive = false; }
+  };
+  const result = snapshotMutationQueue.then(guarded, guarded);
   snapshotMutationQueue = result.then(() => undefined, () => undefined);
   return result;
+}
+
+export function isLocalSnapshotOperationActive(): boolean {
+  return snapshotMutationActive;
 }
 
 function snapshotNow(settings: AppSettings): Date {
@@ -355,11 +366,12 @@ async function writeAtomicJson(uri: string, value: unknown): Promise<void> {
 async function reconstructIndex(): Promise<SnapshotIndex> {
   const entries = await FileSystem.readDirectoryAsync(SNAPSHOT_DIR);
   const snapshots: Array<{ id: string; createdAt: string }> = [];
+  const verifiedVault: VerifiedVaultMedia = new Map();
   for (const name of entries) {
     if (!/^snapshot-[a-zA-Z0-9_-]+\.json$/.test(name)) continue;
     const id = name.slice(0, -".json".length);
     try {
-      const manifest = await loadManifest(id);
+      const manifest = await loadManifest(id, verifiedVault);
       snapshots.push({ id: manifest.id, createdAt: manifest.createdAt });
     } catch {
       // Invalid manifests are intentionally not trusted or deleted during
@@ -486,6 +498,7 @@ type VerifiedVaultMedia = Map<string, Pick<SnapshotMedia, "size" | "crc32" | "sh
 async function verifyVaultMedia(
   media: SnapshotMedia,
   verified: VerifiedVaultMedia,
+  onBytes?: (current: number, total: number) => void,
 ): Promise<void> {
   const hash = media.ref.slice("snapshot-media://".length);
   const prior = verified.get(hash);
@@ -506,6 +519,7 @@ async function verifyVaultMedia(
     crc = crcUpdate(crc, bytes);
     sha.update(bytes);
     offset += bytes.length;
+    onBytes?.(offset, media.size);
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
   }
   if (crcFinal(crc) !== media.crc32 || sha.digestHex() !== media.sha256) {
@@ -517,13 +531,14 @@ async function verifyVaultMedia(
 async function loadManifest(
   id: string,
   verified: VerifiedVaultMedia = new Map(),
+  onBytes?: (current: number, total: number) => void,
 ): Promise<LocalSnapshotManifest> {
   const manifest = await loadManifestMetadata(id);
   // A manifest is not valid merely because its JSON parses: verify every
   // referenced vault object before exposing it to restore or retention. The
   // shared map ensures deduplicated blobs are hashed once per operation.
   for (const media of manifest.media) {
-    await verifyVaultMedia(media, verified);
+    await verifyVaultMedia(media, verified, onBytes);
   }
   return manifest;
 }
@@ -880,15 +895,27 @@ export function createLocalSnapshot(
   records: MemoryRecord[], tags: string[], settings: AppSettings,
   onProgress?: SnapshotProgressCallback,
 ): Promise<SnapshotSummary> {
-  return runSnapshotMutation(() =>
-    createLocalSnapshotUnlocked(records, tags, settings, onProgress));
+  return runSnapshotMutation(async () => {
+    const snapshot = await createLocalSnapshotUnlocked(records, tags, settings, onProgress);
+    const index = await readIndex();
+    const today = todayKey(snapshotNow(settings));
+    await writeIndex({
+      ...index,
+      lastAttemptDate: today,
+      lastCompletedDate: today,
+      lastError: undefined,
+    });
+    return snapshot;
+  });
 }
 
 async function maybeCreateAutomaticSnapshotUnlocked(
   records: MemoryRecord[], tags: string[], settings: AppSettings,
   onProgress?: SnapshotProgressCallback,
 ): Promise<SnapshotStatus> {
+  const checkStarted = Date.now();
   const index = await readIndex();
+  console.info(`[LocalSnapshots] Index read: ${Date.now() - checkStarted}ms; ${index.snapshots.length} restore points.`);
   const today = todayKey(snapshotNow(settings));
   const lastSuccessfulEntry =
     index.snapshots.find((entry) => entry.id === index.lastSuccessId) ??
@@ -925,8 +952,12 @@ async function maybeCreateAutomaticSnapshotUnlocked(
       (a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt),
     )[0];
     if (comparisonEntry) {
+      const manifestStarted = Date.now();
       const manifest = await loadManifestMetadata(comparisonEntry.id);
+      console.info(`[LocalSnapshots] Baseline metadata read: ${Date.now() - manifestStarted}ms.`);
+      const fingerprintStarted = Date.now();
       const currentFingerprint = stableFingerprint(records, tags, settings);
+      console.info(`[LocalSnapshots] Change comparison prepared: ${Date.now() - fingerprintStarted}ms; ${records.length} records.`);
       const matchesLegacyTestFingerprint =
         IS_SNAPSHOT_TEST_BUILD &&
         manifest.fingerprint === legacyStableFingerprint(
@@ -936,7 +967,7 @@ async function maybeCreateAutomaticSnapshotUnlocked(
           manifest.settings.snapshotTestDate,
         );
       if (manifest.fingerprint === currentFingerprint || matchesLegacyTestFingerprint) {
-        console.info("[LocalSnapshots] Current data already has a snapshot.");
+        console.info(`[LocalSnapshots] No changes; check completed in ${Date.now() - checkStarted}ms.`);
         await writeIndex({
           ...index,
           lastAttemptDate: today,
@@ -1066,14 +1097,25 @@ export function resetSnapshotTestHistory(): Promise<void> {
   return runSnapshotMutation(resetSnapshotTestHistoryUnlocked);
 }
 
-async function deleteLocalSnapshotUnlocked(id: string): Promise<void> {
+async function deleteLocalSnapshotUnlocked(
+  id: string,
+  onProgress?: SnapshotProgressCallback,
+): Promise<void> {
+  const started = Date.now();
   const index = await readIndex();
   const indexTrusted = index.trusted !== false;
   let inventoryComplete = true;
   const valid: LocalSnapshotManifest[] = [];
-  for (const entry of index.snapshots) {
+  // Shared content-addressed blobs are verified once in this serialized
+  // operation, never once per retained snapshot or persisted across operations.
+  const verifiedVault: VerifiedVaultMedia = new Map();
+  for (let position = 0; position < index.snapshots.length; position++) {
+    const entry = index.snapshots[position];
+    const stage = `Checking snapshot ${position + 1} of ${index.snapshots.length}`;
+    onProgress?.({ stage, current: position, total: index.snapshots.length });
     try {
-      valid.push(await loadManifest(entry.id));
+      valid.push(await loadManifest(entry.id, verifiedVault, (current, total) =>
+        onProgress?.({ stage: `${stage} · verifying media`, current, total, unit: "bytes" })));
     } catch (error) {
       inventoryComplete = false;
       console.warn(`[LocalSnapshots] delete verification failed for ${entry.id}:`, error);
@@ -1082,15 +1124,10 @@ async function deleteLocalSnapshotUnlocked(id: string): Promise<void> {
   const newest = [...valid].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
   if (newest?.id === id) throw new Error("The newest verified snapshot is protected.");
   const kept = index.snapshots.filter((entry) => entry.id !== id);
-  const manifests: LocalSnapshotManifest[] = [];
-  for (const entry of kept) {
-    try {
-      manifests.push(await loadManifest(entry.id));
-    } catch (error) {
-      inventoryComplete = false;
-      console.warn(`[LocalSnapshots] retained verification failed for ${entry.id}:`, error);
-    }
-  }
+  // These manifests and all their media were verified above. The exclusive
+  // mutation queue prevents another snapshot operation changing the vault.
+  const manifests = valid.filter((manifest) => manifest.id !== id);
+  onProgress?.({ stage: "Updating snapshot history", current: 0, total: 1 });
   if (!inventoryComplete || index.cleanupBlocked) {
     await writeIndex({ ...index, cleanupBlocked: true, snapshots: kept });
   } else {
@@ -1099,8 +1136,10 @@ async function deleteLocalSnapshotUnlocked(id: string): Promise<void> {
     if (indexTrusted) await garbageCollect(retained, valid);
   }
   await FileSystem.deleteAsync(`${SNAPSHOT_DIR}${id}.json`, { idempotent: true });
+  onProgress?.({ stage: "Snapshot removed", current: 1, total: 1 });
+  console.info(`[LocalSnapshots] Delete completed: ${Date.now() - started}ms; ${verifiedVault.size} unique media verified.`);
 }
 
-export function deleteLocalSnapshot(id: string): Promise<void> {
-  return runSnapshotMutation(() => deleteLocalSnapshotUnlocked(id));
+export function deleteLocalSnapshot(id: string, onProgress?: SnapshotProgressCallback): Promise<void> {
+  return runSnapshotMutation(() => deleteLocalSnapshotUnlocked(id, onProgress));
 }

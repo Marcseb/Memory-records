@@ -3,30 +3,47 @@
 Replit holds the source. Ubuntu/Android Studio builds and signs the APK.
 The installed app does not update automatically when you edit Replit.
 
+The current source baseline is package `app.memoryrecords`, version `1.0.8`,
+Android version code `9`. The source ZIP is a sanitized workspace snapshot: it
+includes the current app and lockfile, but excludes Git history, uploads,
+dependencies, local environment files, generated build output, and signing keys.
+It is source code, not a prebuilt or signed APK.
+
 ## Each release
 
 1. Make and test the changes in Replit.
-2. In this app's `app.json`, update `expo.version` and increase
-   `expo.android.versionCode` above the version installed on the phone.
-   The first release used version `1.0.0`, code `1`; the next can use
-   `1.0.1`, code `2`. Keep the Android package `app.memoryrecords`.
-   Preparation validates these values but never increments them automatically.
+2. Compare the installed app version with `expo.version` and
+   `expo.android.versionCode` in `artifacts/memory-records/app.json`. This ZIP
+   starts at version `1.0.8`, code `9`. If the phone already has code `9` or
+   later, increase both values before building (for example, `1.0.9`, code `10`).
+   Keep the Android package `app.memoryrecords`. Preparation validates these
+   values but never increments them automatically.
 3. Export a verified complete backup from the phone.
 4. Download the updated **whole Replit workspace ZIP**, not just this app
-   directory. Extract to a new Ubuntu folder and keep your previous working copy.
+   directory. Extract it to a new Ubuntu folder and keep your previous working
+   copy. Do not copy a keystore or `.env` file into the ZIP.
 5. Open a Terminal at the extracted workspace root (where `pnpm-lock.yaml` is)
-   and run:
+   and install the locked dependencies:
 
    ```sh
    pnpm install --frozen-lockfile
+   ```
+
+6. Prepare the native Android project:
+
+   ```sh
    pnpm run android:prepare
    ```
 
-6. Open `artifacts/memory-records/android` in Android Studio. Use installed
+   The in-app Map screen is temporarily disabled, so a Maps SDK key is not
+   needed. If the map is restored later, use a Google Maps SDK for Android key
+   restricted to package `app.memoryrecords` and the release keystore's SHA-1.
+   Never put that key in the ZIP, Git, or chat.
+7. Open `artifacts/memory-records/android` in Android Studio. Use installed
    **JDK 17**, sync, and choose **Generate Signed App Bundle or APK → APK**.
    Use your **existing keystore**, its existing alias/passwords, and **release**.
    Confirm the app ID is `app.memoryrecords`.
-7. Find the signed APK in `android/app/release` or
+8. Find the signed APK in `android/app/release` or
    `android/app/build/outputs/apk/release`. Install over the existing app,
    without uninstalling. Check the changed features and existing records/media.
 
@@ -56,7 +73,8 @@ build/sign an APK.
 
 ## One-time Ubuntu requirements
 
-Keep the working Node installation, Android SDK/NDK/CMake, and JDK 17.
+Keep Node.js 24, pnpm 11.28.5, Android Studio, the Android SDK/NDK/CMake
+requested by Gradle, and JDK 17.
 The Node executable must be visible to Android Studio's Gradle process, not
 only to its Terminal. The working Node link you already made can remain;
 if that nvm Node version is removed, update the link accordingly.
@@ -72,6 +90,11 @@ pnpm --version
 Keep the signing keystore **outside** the project and backed up securely.
 Never upload it or its passwords to Replit/Git. Loss of the signing key prevents
 ordinary updates over your existing private installation.
+
+The archive does not include `.env` files. The app has a default API-server
+address; only set `EXPO_PUBLIC_API_SERVER_URL` when you intentionally need to
+override it. Never put signing passwords, API keys, or other secrets in that
+variable or in the ZIP.
 
 ## Checks and troubleshooting
 

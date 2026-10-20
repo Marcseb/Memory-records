@@ -56,3 +56,4 @@ Thumbs.db
 
 # Generated APKs are build outputs, not source files.
 /downloads/
+/generated-artifacts/

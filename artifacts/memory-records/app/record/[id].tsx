@@ -2,6 +2,9 @@ import { Feather } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
+import * as Sharing from "expo-sharing";
+import * as FileSystem from "expo-file-system/legacy";
+import ViewShot, { type ViewShotRef } from "react-native-view-shot";
 import {
   copyImageToAppStorage,
   copyThumbnailToAppStorage,
@@ -13,6 +16,11 @@ import { VideoPlayerModal } from "@/components/VideoPlayerModal";
 import { PhotoViewerModal } from "@/components/PhotoViewerModal";
 import { VoiceMemoRecorder } from "@/components/VoiceMemoRecorder";
 import { VoiceMemoPlayer } from "@/components/VoiceMemoPlayer";
+import {
+  SHARE_CARD_HEIGHT,
+  SHARE_CARD_WIDTH,
+  ShareCard,
+} from "@/components/ShareCard";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -60,6 +68,8 @@ export default function RecordDetailScreen() {
   const [editedTags, setEditedTags] = useState<string[]>([]);
   const [editedEmotion, setEditedEmotion] = useState("neutral");
   const [editedAudioUri, setEditedAudioUri] = useState<string | undefined>(undefined);
+  const [isSharing, setIsSharing] = useState(false);
+  const shareCardRef = useRef<ViewShotRef>(null);
   const editInputRef = useRef<TextInput>(null);
   const currentYear = new Date().getFullYear();
   const requestUnlock = (featureName: string) => {
@@ -126,11 +136,32 @@ export default function RecordDetailScreen() {
   };
 
   const handleCancelEdit = () => {
+    if (editedAudioUri && editedAudioUri !== record.audioUri) {
+      deleteAppAudio(editedAudioUri).catch(() => {});
+    }
     setIsEditing(false);
     setEditedNote("");
     setEditedYear(undefined);
     setEditedTags([]);
     setEditedEmotion("neutral");
+    setEditedAudioUri(undefined);
+  };
+
+  const handleEditedAudioSaved = (uri: string) => {
+    if (
+      editedAudioUri &&
+      editedAudioUri !== record.audioUri &&
+      editedAudioUri !== uri
+    ) {
+      deleteAppAudio(editedAudioUri).catch(() => {});
+    }
+    setEditedAudioUri(uri);
+  };
+
+  const handleEditedAudioDeleted = (uri: string) => {
+    if (uri !== record.audioUri) {
+      deleteAppAudio(uri).catch(() => {});
+    }
     setEditedAudioUri(undefined);
   };
 
@@ -327,6 +358,14 @@ export default function RecordDetailScreen() {
       color: colors.primaryForeground,
     },
     deleteBtn: { padding: 4 },
+    shareBtn: { padding: 4 },
+    shareCapture: {
+      position: "absolute",
+      top: 0,
+      left: -1000,
+      zIndex: -1,
+      elevation: -1,
+    },
     scroll: { flex: 1 },
     photo: { width: "100%", height: 280 },
     replacePhotoBtn: {
@@ -805,6 +844,52 @@ export default function RecordDetailScreen() {
     ]);
   };
 
+  const handleShare = async () => {
+    if (Platform.OS === "web" || isSharing) return;
+
+    setIsSharing(true);
+    let imageUri: string | undefined;
+    try {
+      if (!(await Sharing.isAvailableAsync())) {
+        Alert.alert("Sharing unavailable", "This device does not support sharing files.");
+        return;
+      }
+
+      if (record.imageUri) {
+        await Image.prefetch(record.imageUri).catch(() => false);
+      }
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      });
+
+      const cardView = shareCardRef.current;
+      if (!cardView) throw new Error("Share card is not ready.");
+
+      imageUri = await cardView.capture();
+      await Sharing.shareAsync(imageUri, {
+        mimeType: "image/png",
+        dialogTitle: "Share memory card",
+      });
+    } catch (error) {
+      console.warn("Share card creation failed", error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const requiresNativeBuild = errorMessage.includes("RNViewShot is undefined");
+      Alert.alert(
+        requiresNativeBuild ? "Build required" : "Could not share memory",
+        requiresNativeBuild
+          ? "Image-card sharing needs the updated native app. Rebuild and reinstall the APK to use it."
+          : "Please try again."
+      );
+    } finally {
+      if (imageUri) {
+        await FileSystem.deleteAsync(imageUri, { idempotent: true }).catch((error) => {
+          console.warn("Temporary share card cleanup failed", error);
+        });
+      }
+      setIsSharing(false);
+    }
+  };
+
   return (
     <View style={s.container}>
       <View style={s.header}>
@@ -829,6 +914,19 @@ export default function RecordDetailScreen() {
               <Feather name="file-plus" size={14} color={colors.primary} />
               <Text style={s.continueBtnText}>New note</Text>
             </Pressable>
+            {Platform.OS !== "web" && (
+              <Pressable
+                style={[s.shareBtn, isSharing && { opacity: 0.45 }]}
+                onPress={handleShare}
+                disabled={isSharing}
+                accessibilityRole="button"
+                accessibilityLabel="Share this memory as an image"
+                testID="share-record"
+                hitSlop={8}
+              >
+                <Feather name="share-2" size={20} color={colors.primary} />
+              </Pressable>
+            )}
             <Pressable style={s.deleteBtn} onPress={handleDelete}>
               <Feather name="trash-2" size={20} color={colors.destructive} />
             </Pressable>
@@ -1165,8 +1263,8 @@ export default function RecordDetailScreen() {
                   {isPremiumUnlocked ? (
                     <VoiceMemoRecorder
                       audioUri={editedAudioUri}
-                      onSaved={(uri) => setEditedAudioUri(uri)}
-                      onDeleted={() => setEditedAudioUri(undefined)}
+                      onSaved={handleEditedAudioSaved}
+                      onDeleted={handleEditedAudioDeleted}
                     />
                   ) : (
                     <Pressable
@@ -1261,6 +1359,25 @@ export default function RecordDetailScreen() {
           )}
         </View>
       </KeyboardAwareScrollView>
+
+      {Platform.OS !== "web" && (
+        <View
+          pointerEvents="none"
+          accessible={false}
+          style={[
+            s.shareCapture,
+            { width: SHARE_CARD_WIDTH, height: SHARE_CARD_HEIGHT },
+          ]}
+        >
+          <ViewShot
+            ref={shareCardRef}
+            options={{ format: "png", quality: 1, result: "tmpfile" }}
+            style={{ width: SHARE_CARD_WIDTH, height: SHARE_CARD_HEIGHT }}
+          >
+            <ShareCard key={`${record.id}-${record.imageUri ?? "no-photo"}`} record={record} />
+          </ViewShot>
+        </View>
+      )}
 
       <UnlockModal
         visible={showUnlockModal}

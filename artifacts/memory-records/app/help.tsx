@@ -209,7 +209,7 @@ export default function HelpScreen() {
 
         <Section icon="camera" title="Capturing memories">
           <Bullet>
-            <Text style={s.strong}>Photo from gallery</Text> — pick any photo and the app reads available EXIF metadata, including the date and GPS coordinates when the device exposes them. If no date is available, enter it manually. Tap the photo on the detail screen to view it full-screen. A camera icon overlay on any card lets you replace the photo at any time.
+            <Text style={s.strong}>Photo from gallery</Text> — pick any photo and the app reads available EXIF metadata, including the date and GPS coordinates when the device exposes them. If no date is available, enter it manually. On Android, if photo GPS cannot be read, the app may offer the phone's current location; this is optional and may differ from where the photo was taken. Tap the photo on the detail screen to view it full-screen. A camera icon overlay on any card lets you replace the photo at any time.
           </Bullet>
           <Bullet>
             <Text style={s.strong}>Video clip</Text> — pick a short video from your gallery. The first frame is extracted as a thumbnail shown on the card and detail screen. Tap the thumbnail to play the video in a full-screen player with native controls. Video clips are included in the free core features.
@@ -258,6 +258,18 @@ export default function HelpScreen() {
           </Bullet>
           <Bullet>
             <Text style={s.strong}>Year rank reordering (Date mode)</Text> — in Date sort, each card shows its position within its year group as <Text style={s.strong}>N/M</Text> (e.g. 2/5). A column of controls appears on the right: ↑ and ↓ arrows to move the note one step within its year, and a delete button. The first move automatically assigns ranks to all notes in that year based on their current order. Ranks are saved and survive restarts.
+          </Bullet>
+          <Bullet>
+            <Text style={s.strong}>Map</Text> — open the Map tab to see memories with saved GPS coordinates. Pins use the memory's emotion colour; tap a pin or callout to open the record.
+          </Bullet>
+          <Bullet>
+            <Text style={s.strong}>Surprise Me</Text> — tap the shuffle button on Home to open a random memory dated before today.
+          </Bullet>
+        </Section>
+
+        <Section icon="share-2" title="Sharing a memory">
+          <Bullet>
+            On a record's detail screen, tap <Text style={s.strong}>Share as image card</Text>. The card uses the record's photo when available, or its emotion artwork otherwise, and includes a note excerpt and date. It opens the phone's system share sheet.
           </Bullet>
         </Section>
 
@@ -378,10 +390,10 @@ export default function HelpScreen() {
 
         <Section icon="archive" title="Backup & restore">
           <Bullet>
-            <Text style={s.strong}>Automatic local snapshots</Text> — when enabled in Settings, the app opportunistically creates at most one verified snapshot per local calendar day after records, tags, or settings change. It keeps a balanced set of 7 daily, 4 weekly, and 3 monthly restore points entirely on this device.
+            <Text style={s.strong}>Automatic local snapshots</Text> — when enabled in Settings, the app waits for two quiet minutes on the Memories screen before checking for changes. Touches and navigation restart the wait; capture, import, restore, and export defer automatic work. It creates at most one verified automatic snapshot per local calendar day after records, tags, or settings change, keeping 7 daily, 4 weekly, and 3 monthly restore points entirely on this device. An unchanged-data check is silent; actual work uses a small non-blocking status banner.
           </Bullet>
           <Bullet>
-            Snapshot media is stored in a content-addressed local vault with bounded streaming reads and checksum verification. A failed media read never creates a partial usable snapshot; video thumbnails are optional.
+            Snapshot media is stored in a content-addressed local vault with bounded streaming reads and checksum verification. A failed media read never creates a partial usable snapshot; video thumbnails are optional. Closing or backgrounding the app before the idle period ends defers the check until a later quiet foreground session. In Settings → Local Snapshot History, use <Text style={s.strong}>Create snapshot now</Text> to make a verified restore point without waiting, even if automatic snapshots are disabled. Local snapshots do not replace portable Complete backups.
           </Bullet>
           <Bullet>
             Open <Text style={s.strong}>Settings → Local Snapshot History</Text> to review counts and status, restore a verified point (matching IDs are replaced while unrelated records remain), or delete an older point. The newest verified point is protected.
@@ -391,6 +403,12 @@ export default function HelpScreen() {
           </Bullet>
           <Bullet>
             <Text style={s.strong}>Complete restore (Android)</Text> — select a .mrbak archive. The app validates it, restores and verifies media in a staging directory, restores settings, and merges records without deleting unrelated records.
+          </Bullet>
+          <Bullet>
+            <Text style={s.strong}>Complete-backup reminder</Text> — Settings recommends a new complete backup after 30 days or 25 distinct memory changes, whichever comes first. You can snooze the reminder for seven days. A restore triggers a fresh recommendation.
+          </Bullet>
+          <Bullet>
+            <Text style={s.strong}>Previous Expo Go data recovery (Android)</Text> — this option appears only in Expo Go. It scans older Expo Go storage areas on the same phone after an SDK or project change; the source data is not removed. A standalone APK cannot access those Expo Go folders.
           </Bullet>
           <Bullet>
             <Text style={s.strong}>JSON export</Text> — tap Export in Settings. On Android a folder picker opens so you can save directly to Documents, Downloads, or Google Drive. On iPhone the share sheet appears with "Save to Files". The file is named <Text style={s.strong}>memory-records-backup-YYYY-MM-DD.json</Text> and is human-readable. Photo, video, and voice memo references are saved as local file paths, not embedded media data.
@@ -416,6 +434,9 @@ export default function HelpScreen() {
           </Bullet>
           <Bullet>
             <Text style={s.strong}>Local authentication.</Text> Your login credentials are stored locally on this device and are never sent to a remote server.
+          </Bullet>
+          <Bullet>
+            <Text style={s.strong}>Optional app lock.</Text> Protect the app with device biometrics or a PIN fallback from Settings.
           </Bullet>
           <Bullet>
             <Text style={s.strong}>AI calls are direct.</Text> When the AI Interviewer is active, your messages go directly from your device to Mistral or OpenAI using your own key — no intermediary server reads them.

@@ -9,12 +9,12 @@ import * as Haptics from "expo-haptics";
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { useColors } from "@/hooks/useColors";
-import { copyAudioToAppStorage, deleteAppAudio } from "@/utils/storage";
+import { copyAudioToAppStorage } from "@/utils/storage";
 
 interface Props {
   audioUri?: string;
   onSaved: (uri: string) => void;
-  onDeleted: () => void;
+  onDeleted: (uri: string) => void;
 }
 
 export function VoiceMemoRecorder({ audioUri, onSaved, onDeleted }: Props) {
@@ -88,36 +88,38 @@ export function VoiceMemoRecorder({ audioUri, onSaved, onDeleted }: Props) {
       return;
     }
     if (audioUri) {
-      Alert.alert("Replace voice memo?", "The existing recording will be deleted.", [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Replace",
-          style: "destructive",
-          onPress: async () => {
-            await deleteAppAudio(audioUri);
-            onDeleted();
-            await startRecording();
+      Alert.alert(
+        "Replace voice memo?",
+        "The existing recording will stay available unless the new recording is saved.",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Replace",
+            onPress: startRecording,
           },
-        },
-      ]);
+        ]
+      );
     } else {
       await startRecording();
     }
   };
 
   const handleDelete = () => {
-    Alert.alert("Delete voice memo?", "This cannot be undone.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          if (audioUri) await deleteAppAudio(audioUri);
-          onDeleted();
-          if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    Alert.alert(
+      "Delete voice memo?",
+      "The memo will be removed from this form. In an existing record, the saved copy stays intact until you save.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            if (audioUri) onDeleted(audioUri);
+            if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          },
         },
-      },
-    ]);
+      ]
+    );
   };
 
   const s = StyleSheet.create({
