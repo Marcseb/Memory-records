@@ -4,7 +4,7 @@
   "private": true,
   "main": "expo-router/entry",
   "scripts": {
-    "dev": "pnpm run dev:snapshot-test",
+    "dev": "pnpm run dev:expo-go",
     "dev:expo-go": "sh -c 'if [ -n \"$REPLIT_EXPO_SESSION_SECRET\" ]; then pnpm exec create-launch login --session \"$REPLIT_EXPO_SESSION_SECRET\" || true; fi' && EXPO_PACKAGER_PROXY_URL=https://$REPLIT_EXPO_DEV_DOMAIN EXPO_PUBLIC_DOMAIN=$REPLIT_DEV_DOMAIN EXPO_PUBLIC_REPL_ID=$REPL_ID REACT_NATIVE_PACKAGER_HOSTNAME=$REPLIT_DEV_DOMAIN pnpm exec expo start --localhost --port $PORT",
     "dev:snapshot-test": "sh -c 'if [ -n \"$REPLIT_EXPO_SESSION_SECRET\" ]; then pnpm exec create-launch login --session \"$REPLIT_EXPO_SESSION_SECRET\" || true; fi' && APP_VARIANT=snapshot-test EXPO_PACKAGER_PROXY_URL=https://$REPLIT_EXPO_DEV_DOMAIN EXPO_PUBLIC_DOMAIN=$REPLIT_DEV_DOMAIN EXPO_PUBLIC_REPL_ID=$REPL_ID REACT_NATIVE_PACKAGER_HOSTNAME=$REPLIT_DEV_DOMAIN pnpm exec expo start --dev-client --localhost --port $PORT",
     "build": "node scripts/build.js",
@@ -13,7 +13,9 @@
     "android:prepare": "node scripts/prepare-android.cjs",
     "android:check": "node scripts/prepare-android.cjs --check",
     "test:android-build": "node --test scripts/android-build.test.cjs",
-    "test:local-snapshots": "node --experimental-vm-modules --test scripts/local-snapshots.test.cjs"
+    "test:free-edition": "node --test scripts/free-edition.test.cjs",
+    "test:local-snapshots": "node --experimental-vm-modules --test scripts/local-snapshots.test.cjs",
+    "test:complete-backup": "node --experimental-vm-modules --test scripts/complete-backup.test.cjs"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

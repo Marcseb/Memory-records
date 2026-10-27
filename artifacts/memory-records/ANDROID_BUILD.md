@@ -1,116 +1,67 @@
-# Private production APK: repeatable updates
+# Free Android production build and Google Play preparation
 
-Replit holds the source. Ubuntu/Android Studio builds and signs the APK.
-The installed app does not update automatically when you edit Replit.
+This guide applies only to `google-play-free`.
 
-The current source baseline is package `app.memoryrecords`, version `1.0.8`,
-Android version code `9`. The source ZIP is a sanitized workspace snapshot: it
-includes the current app and lockfile, but excludes Git history, uploads,
-dependencies, local environment files, generated build output, and signing keys.
-It is source code, not a prebuilt or signed APK.
+- App: Memory Records Free
+- Package: `app.memoryrecords.free` — keep this fixed after release
+- Source version: `1.0.8`, initial Android version code `1`
+- Snapshot Test and all Pro activation paths: disabled
 
-## Each release
+## Prepare
 
-1. Make and test the changes in Replit.
-2. Compare the installed app version with `expo.version` and
-   `expo.android.versionCode` in `artifacts/memory-records/app.json`. This ZIP
-   starts at version `1.0.8`, code `9`. If the phone already has code `9` or
-   later, increase both values before building (for example, `1.0.9`, code `10`).
-   Keep the Android package `app.memoryrecords`. Preparation validates these
-   values but never increments them automatically.
-3. Export a verified complete backup from the phone.
-4. Download the updated **whole Replit workspace ZIP**, not just this app
-   directory. Extract it to a new Ubuntu folder and keep your previous working
-   copy. Do not copy a keystore or `.env` file into the ZIP.
-5. Open a Terminal at the extracted workspace root (where `pnpm-lock.yaml` is)
-   and install the locked dependencies:
+1. Use a separate checkout of `google-play-free`; keep the private/full app's
+   checkout unchanged. Read the root `BRANCH_MANAGEMENT.md`.
+2. Use Node.js 24, pnpm 11.28.5, Android Studio, local JDK 17, and the SDK/NDK/CMake
+   versions requested by the generated Android project.
+3. From the workspace root:
 
    ```sh
    pnpm install --frozen-lockfile
-   ```
-
-6. Prepare the native Android project:
-
-   ```sh
+   pnpm run android:check
    pnpm run android:prepare
    ```
 
-   The in-app Map screen is temporarily disabled, so a Maps SDK key is not
-   needed. If the map is restored later, use a Google Maps SDK for Android key
-   restricted to package `app.memoryrecords` and the release keystore's SHA-1.
-   Never put that key in the ZIP, Git, or chat.
-7. Open `artifacts/memory-records/android` in Android Studio. Use installed
-   **JDK 17**, sync, and choose **Generate Signed App Bundle or APK → APK**.
-   Use your **existing keystore**, its existing alias/passwords, and **release**.
-   Confirm the app ID is `app.memoryrecords`.
-8. Find the signed APK in `android/app/release` or
-   `android/app/build/outputs/apk/release`. Install over the existing app,
-   without uninstalling. Check the changed features and existing records/media.
+4. Open `artifacts/memory-records/android` in Android Studio. Confirm the package
+   is **app.memoryrecords.free**, version code is correct, and the Release
+   variant is selected.
 
-## What is now automatic
+`android:prepare` regenerates native files and backs up existing native source.
+Keep private signing files outside the project. No Google Maps key is required
+while the Map screen is disabled.
 
-- The compatible Babel preset is a direct app dependency.
-- Expo, React and React Native are declared once, under dependencies, so
-  prebuild does not need to add duplicate entries.
-- The committed lockfile accompanies those changes.
-- The guide records the pnpm version used in the successful local build,
-  without changing Replit's managed package manager.
-- `android:prepare` explicitly forces production mode even when the parent
-  terminal or a downloaded `.env` selects Snapshot Test.
-- The native-build plugin recreates local-only JDK 17 daemon criteria and
-  disables `updateDaemonJvm` download-link generation on every prebuild.
-- Preparation verifies the generated production package and version numbers.
+## Device testing
 
-No manual Babel installation or Gradle block editing is needed anymore.
-The normal Snapshot Test development command and storage identity are unchanged.
-Preparation regenerates the Android folder so it matches current source.
-Before regeneration, any existing native source/configuration is copied into
-`.android-prebuild-backups` (large build caches are excluded). Keep the old
-working project separately as well. Private keystores inside `android` block
-preparation: move them outside the project first.
-The command does not create a signing key, modify memory/backup data, or
-build/sign an APK.
+Generate a signed **release APK** for local tests. Install it alongside, not
+over, the private `app.memoryrecords` app. Verify core capture, photo/video
+playback, app lock, snapshots, Complete backup/restore, and JSON import/export.
+Confirm there are no Pro, Obsidian, payment, donation, or support-checkout entry
+points, including after restoring a full-edition backup.
 
-## One-time Ubuntu requirements
+An app preview is not a substitute for testing the actual native release APK.
 
-Keep Node.js 24, pnpm 11.28.5, Android Studio, the Android SDK/NDK/CMake
-requested by Gradle, and JDK 17.
-The Node executable must be visible to Android Studio's Gradle process, not
-only to its Terminal. The working Node link you already made can remain;
-if that nvm Node version is removed, update the link accordingly.
+## Google Play artifact
 
-For Ubuntu, keep the tested pnpm version. If Corepack reports a different
-version, activate it once:
+Use **Build → Generate Signed App Bundle or APK → Android App Bundle** to
+produce the signed release **AAB**. Preserve the upload key and follow Play App
+Signing setup. An APK is useful for private testing; the AAB is the intended
+Play upload artifact. No binary is signed or published by these source changes.
 
-```sh
-corepack install --global pnpm@11.28.5
-pnpm --version
-```
+The first Play upload must use a unique package and signing setup in your
+developer account. Later updates must retain that identity and increase
+`expo.android.versionCode`. Update the visible version when appropriate.
 
-Keep the signing keystore **outside** the project and backed up securely.
-Never upload it or its passwords to Replit/Git. Loss of the signing key prevents
-ordinary updates over your existing private installation.
+## Before public release
 
-The archive does not include `.env` files. The app has a default API-server
-address; only set `EXPO_PUBLIC_API_SERVER_URL` when you intentionally need to
-override it. Never put signing passwords, API keys, or other secrets in that
-variable or in the ZIP.
+- Review current target API, native library/16 KB page-size compatibility, and
+  Play Console developer-account/testing requirements for this actual AAB.
+- Prepare accurate store text/screenshots, privacy policy, Data safety, content
+  rating, and permissions declarations.
+- Upload to an internal/closed track and test native behavior before production.
+- Verify that the in-app source link points to the corresponding free-branch
+  source revision and preserve GPL notices.
+- Do not add external payment/Pro purchase links without a separate policy and
+  billing review.
 
-## Checks and troubleshooting
-
-`pnpm run android:check` checks the production configuration without prebuild.
-
-Do not routinely upgrade AGP, Gradle, or Expo just because Android Studio
-recommends it. Those upgrades are separate changes requiring validation.
-
-If frozen installation fails, stop and resolve the manifest/lockfile mismatch
-in the source before distributing another ZIP. Do not delete the lockfile.
-
-If preparation says prebuild failed, do not proceed to signing.
-For a bundling failure, run this from the native `android` folder:
-
-```sh
-./gradlew :app:createBundleReleaseJsAndAssets --info --stacktrace > release-bundle-log.txt 2>&1
-```
-
-The log captures bundle-generation diagnostics, not the signing credentials.
+The existing Linux-oriented workspace lockfile is intended for the documented
+Android build environment. Do not assume it is suitable for macOS; Mac source
+packages require a separately matched Darwin-compatible lockfile.

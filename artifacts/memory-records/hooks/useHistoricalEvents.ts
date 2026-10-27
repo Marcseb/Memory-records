@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { getSecureItem } from "@/utils/secureStorage";
+import { PRO_FEATURES_ENABLED } from "@/constants/edition";
 import { MemoryRecord } from "@/context/RecordsContext";
 import { VoiceLanguage } from "@/context/SettingsContext";
 
@@ -31,6 +32,7 @@ async function callAI(
   model: string,
   prompt: string,
 ): Promise<string> {
+  if (!PRO_FEATURES_ENABLED) throw new Error("AI is unavailable in the free edition.");
   const res = await fetch(endpoint, {
     method: "POST",
     headers: {
@@ -155,6 +157,7 @@ export function useHistoricalEvents() {
       maxInternational: number,
       maxNational: number,
     ): Promise<MemoryRecord[]> => {
+      if (!PRO_FEATURES_ENABLED) return [];
       setIsLoading(true);
       setError(null);
 

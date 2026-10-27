@@ -1,6 +1,7 @@
 const base = require("./app.json").expo;
 
-const snapshotTestBuild = process.env.APP_VARIANT === "snapshot-test";
+// This branch always builds the core-only production edition.
+const snapshotTestBuild = false;
 
 module.exports = {
   expo: {
@@ -21,6 +22,7 @@ module.exports = {
     },
     extra: {
       ...(base.extra ?? {}),
+      edition: "google-play-free",
       eas: {
         ...(base.extra?.eas ?? {}),
         projectId: "8e6c0f43-d783-4cd9-9052-5806f1f4e2d0",

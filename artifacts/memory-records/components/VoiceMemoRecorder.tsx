@@ -17,7 +17,11 @@ interface Props {
   onDeleted: (uri: string) => void;
 }
 
-export function VoiceMemoRecorder({ audioUri, onSaved, onDeleted }: Props) {
+export function VoiceMemoRecorder(_props: Props) {
+  return null;
+}
+
+function PaidVoiceMemoRecorder({ audioUri, onSaved, onDeleted }: Props) {
   const colors = useColors();
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const [isRecording, setIsRecording] = useState(false);

@@ -35,6 +35,7 @@ import { useSettings } from "@/context/SettingsContext";
 import { useInterview, ContextNote } from "@/hooks/useInterview";
 import { useColors } from "@/hooks/useColors";
 import { useUnlock } from "@/context/UnlockContext";
+import { PRO_FEATURES_ENABLED } from "@/constants/edition";
 import { UnlockModal } from "@/components/UnlockModal";
 import {
   readGpsFromGalleryAsset,
@@ -1656,6 +1657,7 @@ export default function NewRecordScreen() {
           </View>
 
           {/* AI Interviewer section */}
+          {PRO_FEATURES_ENABLED && <>
           <View style={s.section}>
             <View style={s.interviewHeader}>
               <Text style={s.sectionLabel}>AI Interviewer</Text>
@@ -1793,6 +1795,7 @@ export default function NewRecordScreen() {
           </View>
 
           {/* Note section */}
+          </>}
           <View style={s.section}>
             <Text style={s.sectionLabel}>Note</Text>
             <View style={s.noteContainer}>
@@ -1815,6 +1818,7 @@ export default function NewRecordScreen() {
           </View>
 
           {/* Voice Memo section */}
+          {PRO_FEATURES_ENABLED && <>
           <View style={s.section}>
             <Text style={s.sectionLabel}>Voice Memo</Text>
             {isPremiumUnlocked ? (
@@ -1860,6 +1864,7 @@ export default function NewRecordScreen() {
                 : "Obsidian not configured — go to Settings to enable"}
             </Text>
           </View>
+          </>}
         </KeyboardAwareScrollView>
       )}
 

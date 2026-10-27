@@ -9,7 +9,11 @@ interface Props {
   uri: string;
 }
 
-export function VoiceMemoPlayer({ uri }: Props) {
+export function VoiceMemoPlayer(_props: Props) {
+  return null;
+}
+
+function PaidVoiceMemoPlayer({ uri }: Props) {
   const colors = useColors();
   const player = useAudioPlayer(uri, { updateInterval: 200 });
   const status = useAudioPlayerStatus(player);

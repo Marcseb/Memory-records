@@ -33,7 +33,21 @@ interface UnlockContextType {
 
 const UnlockContext = createContext<UnlockContextType | null>(null);
 
+// The free build must not read cached entitlements or contact the payment API.
+const disabledUnlock = {
+  isPremiumUnlocked: false,
+  isChecking: false,
+  checkStatus: async () => {},
+  checkPayment: async (_email: string) => ({ ok: false, error: "Unavailable in the free edition." }),
+  activateCode: async (_code: string) => ({ ok: false, error: "Unavailable in the free edition." }),
+};
+
 export function UnlockProvider({ children }: { children: React.ReactNode }) {
+  return <UnlockContext.Provider value={disabledUnlock}>{children}</UnlockContext.Provider>;
+}
+
+// Retained as reference only; it is not mounted/exported in this edition.
+function PaidUnlockProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [isPremiumUnlocked, setIsPremiumUnlocked] = useState(false);
   const [isChecking, setIsChecking] = useState(false);

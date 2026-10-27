@@ -1,3 +1,4 @@
+export { default } from "@/components/CoreHelp";
 import { Feather } from "@expo/vector-icons";
 import { router } from "expo-router";
 import React from "react";
@@ -110,7 +111,7 @@ function InfoBox({ children }: InfoBoxProps) {
   );
 }
 
-export default function HelpScreen() {
+function FullEditionHelpScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
 

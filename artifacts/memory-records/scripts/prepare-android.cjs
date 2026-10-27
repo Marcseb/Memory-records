@@ -3,7 +3,7 @@ const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
 const APP_ROOT = path.resolve(__dirname, "..");
-const PRODUCTION_ID = "app.memoryrecords";
+const PRODUCTION_ID = "app.memoryrecords.free";
 
 function backupNativeProject(appRoot) {
   const nativeRoot = path.join(appRoot, "android");
@@ -38,7 +38,7 @@ function backupNativeProject(appRoot) {
 
 function validateConfig(config) {
   if (config.android?.package !== PRODUCTION_ID || config.extra?.snapshotTestBuild !== false) {
-    throw new Error("Production preparation requires app.memoryrecords with the test harness disabled.");
+    throw new Error("Free production preparation requires app.memoryrecords.free with the test harness disabled.");
   }
   if (!Number.isInteger(config.android.versionCode) || config.android.versionCode < 1) {
     throw new Error("Set expo.android.versionCode to a positive integer in app.json.");
@@ -76,8 +76,8 @@ function main() {
   }
 
   const buildFile = fs.readFileSync(path.join(APP_ROOT, "android/app/build.gradle"), "utf8");
-  if (!/applicationId\s+['"]app\.memoryrecords['"]/.test(buildFile)) {
-    throw new Error("Generated Android package is not app.memoryrecords. Do not sign this build.");
+  if (!/applicationId\s+['"]app\.memoryrecords\.free['"]/.test(buildFile)) {
+    throw new Error("Generated Android package is not app.memoryrecords.free. Do not sign this build.");
   }
   const code = buildFile.match(/\bversionCode\s+(\d+)/);
   const version = buildFile.match(/\bversionName\s+['"]([^'"]+)['"]/);

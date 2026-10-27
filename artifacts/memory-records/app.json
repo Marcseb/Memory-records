@@ -1,13 +1,15 @@
 {
   "expo": {
-    "name": "Memory Records",
-    "slug": "memory-records",
+    "name": "Memory Records Free",
+    "slug": "memory-records-free",
     "version": "1.0.8",
     "orientation": "portrait",
     "icon": "./assets/images/memory-records_icon.png",
-    "scheme": "memory-records",
+    "scheme": "memory-records-free",
     "userInterfaceStyle": "automatic",
     "ios": {
+      "bundleIdentifier": "app.memoryrecords.free",
+      "buildNumber": "1",
       "supportsTablet": false,
       "infoPlist": {
         "NSPhotoLibraryUsageDescription": "Memory Records needs access to your photo library to select photos for your memory entries.",
@@ -15,8 +17,8 @@
       }
     },
     "android": {
-      "package": "app.memoryrecords",
-      "versionCode": 9,
+      "package": "app.memoryrecords.free",
+      "versionCode": 1,
       "permissions": [
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_EXTERNAL_STORAGE",
@@ -39,6 +41,12 @@
         "expo-local-authentication",
         {
           "faceIDPermission": "Memory Records uses Face ID to protect access to your memories."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Memory Records can use your current location when a photo has no readable GPS data."
         }
       ],
       [

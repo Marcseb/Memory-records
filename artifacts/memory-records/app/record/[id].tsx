@@ -41,6 +41,7 @@ import { useObsidian } from "@/hooks/useObsidian";
 import { useHistoricalEvents } from "@/hooks/useHistoricalEvents";
 import { useColors } from "@/hooks/useColors";
 import { useUnlock } from "@/context/UnlockContext";
+import { PRO_FEATURES_ENABLED } from "@/constants/edition";
 import { UnlockModal } from "@/components/UnlockModal";
 import { EmotionPicker } from "@/components/EmotionPicker";
 import { getEmotion } from "@/constants/emotions";
@@ -201,6 +202,7 @@ export default function RecordDetailScreen() {
   };
 
   const handleSaveToObsidian = async () => {
+    if (!PRO_FEATURES_ENABLED) return;
     if (!settings.configured) {
       Alert.alert("Not Configured", "Set your Obsidian vault name in Settings first.");
       return;
@@ -1016,7 +1018,7 @@ export default function RecordDetailScreen() {
             </View>
           )}
 
-          {record.savedToObsidian && (
+          {PRO_FEATURES_ENABLED && record.savedToObsidian && (
             <View style={s.badge}>
               <Text style={s.badgeText}>Saved to Obsidian</Text>
             </View>
@@ -1259,6 +1261,7 @@ export default function RecordDetailScreen() {
                 </View>
 
                 {/* Voice memo — available while editing */}
+                {PRO_FEATURES_ENABLED && (
                 <View style={{ marginTop: 4 }}>
                   {isPremiumUnlocked ? (
                     <VoiceMemoRecorder
@@ -1283,6 +1286,7 @@ export default function RecordDetailScreen() {
                   )}
                 </View>
 
+                )}
                 <View style={s.editActions}>
                   <Pressable style={s.editCancelInline} onPress={handleCancelEdit}>
                     <Text style={s.editCancelInlineText}>Cancel</Text>
@@ -1297,7 +1301,7 @@ export default function RecordDetailScreen() {
             ) : (
               <>
                 <Text style={s.noteText}>{record.note || "No note added."}</Text>
-                {record.audioUri && (
+                {PRO_FEATURES_ENABLED && record.audioUri && (
                   <View style={{ marginTop: 12 }}>
                     {isPremiumUnlocked ? (
                       <VoiceMemoPlayer uri={record.audioUri} />
@@ -1320,7 +1324,7 @@ export default function RecordDetailScreen() {
             )}
           </View>
 
-          {!isEditing && record.contextYear !== undefined && !record.isHistoricalEvent && (
+          {PRO_FEATURES_ENABLED && !isEditing && record.contextYear !== undefined && !record.isHistoricalEvent && (
             <Pressable
               style={[s.generateEventsBtn, generatingEvents && { opacity: 0.65 }]}
               onPress={handleGenerateEvents}
@@ -1341,7 +1345,7 @@ export default function RecordDetailScreen() {
             </Pressable>
           )}
 
-          {!isEditing && (
+          {PRO_FEATURES_ENABLED && !isEditing && (
             <Pressable
               style={s.obsidianBtn}
               onPress={handleSaveToObsidian}

@@ -31,6 +31,7 @@ import { useAuth } from "@/context/AuthContext";
 import { MemoryRecord, useRecords } from "@/context/RecordsContext";
 import { VoiceLanguage, VOICE_LANGUAGES, useSettings } from "@/context/SettingsContext";
 import { useUnlock } from "@/context/UnlockContext";
+import { PRO_FEATURES_ENABLED } from "@/constants/edition";
 import { UnlockModal } from "@/components/UnlockModal";
 import { AppLockSettings } from "@/components/AppLock";
 import { useColors } from "@/hooks/useColors";
@@ -318,10 +319,10 @@ export default function SettingsScreen() {
 
   const handleCreateCompleteBackup = async () => {
     if (!ensureSnapshotIdle()) return;
-    if (Platform.OS !== "android") {
+    if (Platform.OS === "web") {
       Alert.alert(
-        "Android folder backup",
-        "Complete folder backups are currently available on Android. The existing JSON backup remains available on other platforms.",
+        "Use the mobile app",
+        "Complete backups with media are available in the Android and iPhone app. JSON backups do not include media.",
       );
       return;
     }
@@ -329,30 +330,50 @@ export default function SettingsScreen() {
     setCompleteBackupBusy(true);
     setCompleteBackupOperation("backup");
     try {
-      const permission = await StorageAccessFramework.requestDirectoryPermissionsAsync();
-      if (!permission.granted) return;
+      let parentUri: string | null = null;
+      if (Platform.OS === "android") {
+        const permission = await StorageAccessFramework.requestDirectoryPermissionsAsync();
+        if (!permission.granted) return;
+        parentUri = permission.directoryUri;
+      }
 
       const result = await createCompleteBackup(
-        permission.directoryUri,
+        parentUri,
         records,
         knownTags,
         settings,
         setCompleteBackupProgress,
       );
-      await markCompleteBackupSuccessful();
-      await refreshCompleteBackupReminder();
+      const confirmSaved = async () => {
+        try {
+          await markCompleteBackupSuccessful();
+          await refreshCompleteBackupReminder();
+        } catch (error) {
+          Alert.alert("Backup Reminder", `Your archive was not changed, but the backup reminder could not be updated: ${String(error)}`);
+        }
+      };
+      if (result.delivery === "saved") await confirmSaved();
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       Alert.alert(
-        "Complete Backup Saved",
+        result.delivery === "shared" ? "Did You Save the Backup?" : "Complete Backup Saved",
         `${result.filename} was created with ${records.length} record${records.length !== 1 ? "s" : ""} and ${result.mediaCount} media file${result.mediaCount !== 1 ? "s" : ""}.` +
           (result.skippedThumbnailCount > 0
             ? `\n\n${result.skippedThumbnailCount} inaccessible video thumbnail${result.skippedThumbnailCount !== 1 ? "s were" : " was"} skipped. The video itself is included and will show a play-icon placeholder after restore.`
+            : "") +
+          (result.delivery === "shared"
+            ? "\n\nIf you chose Save to Files, check that the .mrbak file is in your chosen folder. Closing the share sheet alone does not save a backup."
             : ""),
+        result.delivery === "shared"
+          ? [
+            { text: "Not Saved", style: "cancel" },
+            { text: "I Saved It", onPress: () => { void confirmSaved(); } },
+          ]
+          : undefined,
       );
     } catch (error) {
       Alert.alert(
         "Complete Backup Failed",
-        `${String(error)}\n\nNo valid complete-backup manifest was left behind. Your original records and media were not changed.`,
+        `${String(error)}\n\nYour original records and media were not changed. No backup was marked as saved.`,
       );
     } finally {
       setCompleteBackupBusy(false);
@@ -362,7 +383,15 @@ export default function SettingsScreen() {
   };
 
   const performCompleteRestore = async (inspection: CompleteBackupInspection) => {
-    if (!ensureSnapshotIdle()) return;
+    if (!ensureSnapshotIdle()) {
+      if (Platform.OS === "ios") {
+        await FileSystem.deleteAsync(inspection.archiveUri, { idempotent: true }).catch(() => {});
+      }
+      setCompleteBackupBusy(false);
+      setCompleteBackupProgress(null);
+      setCompleteBackupOperation(null);
+      return;
+    }
     setCompleteBackupBusy(true);
     setCompleteBackupOperation("restore");
     let stagedRestore: Awaited<ReturnType<typeof restoreCompleteBackup>> | null = null;
@@ -402,6 +431,9 @@ export default function SettingsScreen() {
         );
       }
     } finally {
+      if (Platform.OS === "ios") {
+        await FileSystem.deleteAsync(inspection.archiveUri, { idempotent: true }).catch(() => {});
+      }
       setCompleteBackupBusy(false);
       setCompleteBackupProgress(null);
       setCompleteBackupOperation(null);
@@ -410,32 +442,44 @@ export default function SettingsScreen() {
 
   const handleRestoreCompleteBackup = async () => {
     if (!ensureSnapshotIdle()) return;
-    if (Platform.OS !== "android") {
+    if (Platform.OS === "web") {
       Alert.alert(
-        "Android folder restore",
-        "Complete folder restore is currently available on Android.",
+        "Use the mobile app",
+        "Complete backup restore is available in the Android and iPhone app.",
       );
       return;
     }
 
     setCompleteBackupBusy(true);
     setCompleteBackupOperation("restore");
+    let cachedArchiveUri: string | null = null;
+    let awaitingConfirmation = false;
+    const releasePickedArchive = async () => {
+      if (cachedArchiveUri) {
+        await FileSystem.deleteAsync(cachedArchiveUri, { idempotent: true }).catch(() => {});
+      }
+      setCompleteBackupBusy(false);
+      setCompleteBackupProgress(null);
+      setCompleteBackupOperation(null);
+    };
     try {
       const picked = await DocumentPicker.getDocumentAsync({
         type: ["application/zip", "application/octet-stream", "*/*"],
         multiple: false,
-        copyToCacheDirectory: false,
+        // iCloud / Files URLs can lose access after the picker closes. Expo
+        // copies natively, without loading the archive into JavaScript memory.
+        copyToCacheDirectory: Platform.OS === "ios",
       });
       if (picked.canceled || picked.assets.length === 0) return;
+      if (Platform.OS === "ios") cachedArchiveUri = picked.assets[0].uri;
       const inspection = await inspectCompleteBackup(picked.assets[0].uri);
-      setCompleteBackupBusy(false);
 
       const { manifest } = inspection;
       Alert.alert(
         "Restore Complete Backup?",
         `Backup created ${new Date(manifest.createdAt).toLocaleString()}.\n\n${manifest.records.length} record${manifest.records.length !== 1 ? "s" : ""} and ${manifest.media.length} media file${manifest.media.length !== 1 ? "s" : ""} will be restored. Records with matching IDs return to the backup version; unrelated current records are kept.`,
         [
-          { text: "Cancel", style: "cancel" },
+          { text: "Cancel", style: "cancel", onPress: () => { void releasePickedArchive(); } },
           {
             text: "Restore",
             onPress: () => {
@@ -443,13 +487,13 @@ export default function SettingsScreen() {
             },
           },
         ],
+        { cancelable: false },
       );
+      awaitingConfirmation = true;
     } catch (error) {
       Alert.alert("Invalid Complete Backup", String(error));
     } finally {
-      setCompleteBackupBusy(false);
-      setCompleteBackupProgress(null);
-      setCompleteBackupOperation(null);
+      if (!awaitingConfirmation) await releasePickedArchive();
     }
   };
 
@@ -568,6 +612,7 @@ export default function SettingsScreen() {
     let incomingTags: string[] = [];
 
     if (isObsidianMarkdown(text) || (text.includes("**Date:**") && text.includes("## Note"))) {
+      if (!PRO_FEATURES_ENABLED) throw new Error("Import a JSON backup or restore a complete .mrbak backup. Obsidian import is not available in this edition.");
       const parsed = parseMultipleObsidianNotes(text);
       if (parsed.length === 0) {
         const single = parseObsidianNote(text);
@@ -718,6 +763,7 @@ export default function SettingsScreen() {
   };
 
   const handleObsidianImport = async () => {
+    if (!PRO_FEATURES_ENABLED) return;
     if (!ensureSnapshotIdle()) return;
     try {
       // Use DocumentPicker on all platforms — consistent, reliable, and works
@@ -752,6 +798,7 @@ export default function SettingsScreen() {
   };
 
   const handleExportAllToObsidian = async () => {
+    if (!PRO_FEATURES_ENABLED) return;
     if (!ensureSnapshotIdle()) return;
     if (exportingToObsidian) return;
     if (records.length === 0) {
@@ -1568,7 +1615,7 @@ export default function SettingsScreen() {
             <View style={s.modalHandle} />
             <Text style={s.modalTitle}>Import Backup</Text>
             <Text style={s.modalHint}>
-              Pick your JSON backup file, or paste JSON / Obsidian note text below. Format is detected automatically — records are merged, nothing is deleted.
+              Pick your JSON backup file, or paste JSON below. Records are merged, nothing is deleted.
             </Text>
 
             {/* Primary action: pick file */}
@@ -1603,7 +1650,7 @@ export default function SettingsScreen() {
 
             <TextInput
               style={[s.importInput, { color: colors.foreground, borderColor: colors.border }]}
-              placeholder={"Paste JSON backup or Obsidian note text here…"}
+              placeholder={"Paste JSON backup here…"}
               placeholderTextColor={colors.mutedForeground}
               value={importText}
               onChangeText={setImportText}
@@ -1898,6 +1945,7 @@ export default function SettingsScreen() {
         </View>
 
         {/* Obsidian */}
+        {PRO_FEATURES_ENABLED && <>
         <View style={s.section}>
           <Text style={s.sectionTitle}>Obsidian Integration</Text>
           <View style={s.infoBox}>
@@ -2162,6 +2210,7 @@ export default function SettingsScreen() {
         </View>
 
         {/* Backup */}
+        </>}
         <View style={s.section}>
           <Text style={s.sectionTitle}>Backup & Restore</Text>
           {completeBackupReminder?.due && (
@@ -2220,14 +2269,14 @@ export default function SettingsScreen() {
           )}
           <View style={s.infoBox}>
             <Text style={s.infoText}>
-              <Text style={{ fontFamily: "Inter_600SemiBold" }}>Complete backup</Text> creates one portable Android archive containing records, settings, photos, videos, thumbnails, and voice memos.{"\n\n"}
+              <Text style={{ fontFamily: "Inter_600SemiBold" }}>Complete backup</Text> creates one portable .mrbak archive containing records, settings, photos, videos, thumbnails, and voice memos. On Android, choose a folder. On iPhone, choose Save to Files in the share sheet and confirm that you saved it. Restore by selecting the .mrbak file in the file picker.{"\n\n"}
               <Text style={{ fontFamily: "Inter_600SemiBold" }}>JSON backup</Text> remains available as a small, portable records-and-tags backup, but it does not contain media files. Import merges a backup without deleting unrelated records.{"\n\n"}
-              <Text style={{ fontFamily: "Inter_600SemiBold" }}>Import from Obsidian</Text> opens a file picker — navigate to your Obsidian vault folder and select one or more .md files.{"\n"}
+              {PRO_FEATURES_ENABLED && <><Text style={{ fontFamily: "Inter_600SemiBold" }}>Import from Obsidian</Text> opens a file picker — navigate to your Obsidian vault folder and select one or more .md files.{"\n"}
               • Android / Samsung: tap the{" "}
               <Text style={{ fontFamily: "Inter_600SemiBold" }}>☰ menu → Internal storage</Text>, then find{" "}
               <Text style={{ fontFamily: "Inter_600SemiBold" }}>Obsidian → [vault] → Memory Records</Text>.{"\n"}
               • iPhone: tap <Text style={{ fontFamily: "Inter_600SemiBold" }}>Browse → On My iPhone → Obsidian</Text>{" "}
-              (or <Text style={{ fontFamily: "Inter_600SemiBold" }}>iCloud Drive → Obsidian</Text>).
+              (or <Text style={{ fontFamily: "Inter_600SemiBold" }}>iCloud Drive → Obsidian</Text>).</>}
             </Text>
           </View>
           <View style={s.card}>
@@ -2285,7 +2334,7 @@ export default function SettingsScreen() {
               <Text style={s.rowLabel}>Import from JSON backup</Text>
               <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
             </Pressable>
-            {settings.configured && (
+            {PRO_FEATURES_ENABLED && settings.configured && (
               <Pressable
                 style={[s.row, s.rowBorder, exportingToObsidian && { opacity: 0.55 }]}
                 onPress={handleExportAllToObsidian}
@@ -2302,11 +2351,11 @@ export default function SettingsScreen() {
                 <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
               </Pressable>
             )}
-            <Pressable style={s.row} onPress={handleObsidianImport}>
+            {PRO_FEATURES_ENABLED && <Pressable style={s.row} onPress={handleObsidianImport}>
               <Feather name="file-text" size={18} color={colors.primary} />
               <Text style={s.rowLabel}>Import from Obsidian notes</Text>
               <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
-            </Pressable>
+            </Pressable>}
           </View>
         </View>
 
@@ -2354,8 +2403,8 @@ export default function SettingsScreen() {
           <View style={s.card}>
             <View style={[s.row, s.rowBorder]}>
               <Feather name="info" size={18} color={colors.primary} />
-              <Text style={s.rowLabel}>Memory Records</Text>
-              <Text style={s.rowValue}>v1.0</Text>
+              <Text style={s.rowLabel}>Memory Records Free</Text>
+              <Text style={s.rowValue}>v{Constants.expoConfig?.version ?? "1.0.8"} · Free</Text>
             </View>
             <Pressable style={[s.row, s.rowBorder]} onPress={() => router.push("/help")}>
               <Feather name="help-circle" size={18} color={colors.primary} />

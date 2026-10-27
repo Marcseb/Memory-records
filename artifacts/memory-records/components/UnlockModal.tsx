@@ -40,7 +40,12 @@ function buildPayPalUrl(deviceToken: string): string {
   return `https://www.paypal.com/cgi-bin/webscr?${params.toString()}`;
 }
 
-export function UnlockModal({ visible, featureName, onClose, onUnlocked }: Props) {
+export function UnlockModal(_props: Props) {
+  return null;
+}
+
+// Retained Pro implementation, unreachable in the free edition.
+function PaidUnlockModal({ visible, featureName, onClose, onUnlocked }: Props) {
   const colors = useColors();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();

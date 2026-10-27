@@ -1,4 +1,5 @@
 import * as Linking from "expo-linking";
+import { PRO_FEATURES_ENABLED } from "@/constants/edition";
 import { useSettings } from "@/context/SettingsContext";
 import { MemoryRecord, useRecords } from "@/context/RecordsContext";
 
@@ -122,6 +123,7 @@ export function buildAllExportData(
   records: MemoryRecord[],
   authorName?: string
 ): Array<{ filename: string; content: string }> {
+  if (!PRO_FEATURES_ENABLED) throw new Error("Obsidian export is unavailable in the free edition.");
   const sorted = [...records].sort((a, b) => a.createdAt - b.createdAt);
   const keyCounts = new Map<string, number>();
   return sorted.map((record) => {
@@ -143,6 +145,7 @@ export function useObsidian() {
   const saveToObsidian = async (
     record: MemoryRecord
   ): Promise<ObsidianResult> => {
+    if (!PRO_FEATURES_ENABLED) return { ok: false, reason: "not_configured" };
     if (!settings.vaultName.trim()) {
       return { ok: false, reason: "not_configured" };
     }
@@ -183,6 +186,7 @@ export function useObsidian() {
    * overwrite=true so re-exports after edits update the file.
    */
   const exportAllToObsidian = async (): Promise<ObsidianBulkResult> => {
+    if (!PRO_FEATURES_ENABLED) return { exported: 0, failed: 0, total: 0 };
     if (!settings.vaultName.trim()) {
       return { exported: 0, failed: 0, total: 0 };
     }

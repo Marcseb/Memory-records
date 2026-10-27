@@ -3,6 +3,8 @@ import { fetch as expoFetch } from "expo/fetch";
 import { Image as ExpoImage } from "expo-image";
 import * as FileSystem from "expo-file-system/legacy";
 import { StorageAccessFramework } from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
+import { Platform } from "react-native";
 import { getThumbnailAsync } from "expo-video-thumbnails";
 import { strFromU8, strToU8, Unzip, Zip, ZipPassThrough } from "fflate";
 import type { MemoryRecord } from "@/context/RecordsContext";
@@ -402,12 +404,21 @@ async function copyFileToSafInChunks(
 }
 
 export async function createCompleteBackup(
-  parentUri: string,
+  parentUri: string | null,
   records: MemoryRecord[],
   tags: string[],
   settings: AppSettings,
   onProgress?: (progress: CompleteBackupProgress) => void,
-): Promise<{ filename: string; mediaCount: number; skippedThumbnailCount: number }> {
+): Promise<{ filename: string; mediaCount: number; skippedThumbnailCount: number; delivery: "saved" | "shared" }> {
+  if (Platform.OS !== "android" && Platform.OS !== "ios") {
+    throw new Error("Complete backups require the Android or iPhone app.");
+  }
+  if (Platform.OS === "android" && !parentUri) {
+    throw new Error("Choose a folder for the complete backup.");
+  }
+  if (Platform.OS === "ios" && !(await Sharing.isAvailableAsync())) {
+    throw new Error("The iPhone share sheet is unavailable. Please try again on your device.");
+  }
   const backedUpRecords = records.map((record) => ({ ...record }));
   const mediaSources: Array<{ record: MemoryRecord; field: MediaField; uri: string }> = [];
   let skippedThumbnailCount = 0;
@@ -460,7 +471,7 @@ export async function createCompleteBackup(
   }
 
   const filename = `memory-records-complete-${new Date().toISOString().replace(/[:.]/g, "-")}.mrbak`;
-  const stagingUri = `${cacheDirectory}complete-backup-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.mrbak`;
+  const stagingUri = `${fallbackDirectory}${filename}`;
   let destinationUri: string | null = null;
   let zipError: Error | null = null;
   let archiveBytes = 0;
@@ -527,26 +538,39 @@ export async function createCompleteBackup(
       total: mediaSources.length,
       label: "Saving verified archive",
     });
-    destinationUri = await StorageAccessFramework.createFileAsync(
-      parentUri,
-      filename,
-      "application/zip",
-    );
-    await copyFileToSafInChunks(stagingUri, destinationUri, (copied, total) => {
-      onProgress?.({
-        current: copied,
-        total,
-        label: "Saving verified archive",
+    if (Platform.OS === "ios") {
+      // Keep the verified file alive until the native sheet has finished.
+      // Resolution does not distinguish saving from dismissing the sheet.
+      await Sharing.shareAsync(stagingUri, {
+        mimeType: "application/zip",
+        UTI: "public.zip-archive",
+        dialogTitle: "Save Complete Backup to Files",
       });
-    });
+    } else {
+      destinationUri = await StorageAccessFramework.createFileAsync(
+        parentUri!,
+        filename,
+        "application/zip",
+      );
+      await copyFileToSafInChunks(stagingUri, destinationUri, (copied, total) => {
+        onProgress?.({
+          current: copied,
+          total,
+          label: "Saving verified archive",
+        });
+      });
 
-    if (readSize(destinationUri) !== archiveBytes) {
-      throw new Error("Saved archive size verification failed.");
+      if (readSize(destinationUri) !== archiveBytes) {
+        throw new Error("Saved archive size verification failed.");
+      }
+      assertCompleteZip(destinationUri, media.length + 1);
     }
-    assertCompleteZip(destinationUri, media.length + 1);
     await FileSystem.deleteAsync(stagingUri, { idempotent: true }).catch(() => {});
     await FileSystem.deleteAsync(fallbackDirectory, { idempotent: true }).catch(() => {});
-    return { filename, mediaCount: media.length, skippedThumbnailCount };
+    return {
+      filename, mediaCount: media.length, skippedThumbnailCount,
+      delivery: Platform.OS === "ios" ? "shared" : "saved",
+    };
   } catch (error) {
     if (destinationUri) {
       await StorageAccessFramework.deleteAsync(destinationUri, { idempotent: true }).catch(() => {});

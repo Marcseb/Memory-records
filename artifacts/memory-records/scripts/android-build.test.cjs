@@ -60,7 +60,7 @@ test("Google Maps key is optional while the in-app map is disabled", () => {
 });
 
 function production() {
-  return { version: "1.0.1", android: { package: "app.memoryrecords", versionCode: 2 }, extra: { snapshotTestBuild: false } };
+  return { version: "1.0.1", android: { package: "app.memoryrecords.free", versionCode: 2 }, extra: { snapshotTestBuild: false } };
 }
 
 test("valid production configuration is accepted", () => {

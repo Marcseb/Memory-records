@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { getSecureItem } from "@/utils/secureStorage";
+import { PRO_FEATURES_ENABLED } from "@/constants/edition";
 
 const MISTRAL_KEY_STORE = "mr_mistral_key";
 const OPENAI_KEY_STORE = "mr_openai_key";
@@ -48,6 +49,7 @@ interface UseInterviewResult {
 }
 
 async function callMistral(key: string, messages: FullMessage[]): Promise<string> {
+  if (!PRO_FEATURES_ENABLED) throw new Error("AI is unavailable in the free edition.");
   const res = await fetch("https://api.mistral.ai/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
@@ -67,6 +69,7 @@ async function callMistral(key: string, messages: FullMessage[]): Promise<string
 }
 
 async function callOpenAI(key: string, messages: FullMessage[]): Promise<string> {
+  if (!PRO_FEATURES_ENABLED) throw new Error("AI is unavailable in the free edition.");
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
@@ -170,6 +173,7 @@ export function useInterview(): UseInterviewResult {
     seedContext?: string,
     contextNotes: ContextNote[] = []
   ) => {
+    if (!PRO_FEATURES_ENABLED) return;
     setIsLoading(true);
     setError(null);
     setQuestion(null);
@@ -201,6 +205,7 @@ export function useInterview(): UseInterviewResult {
 
   const nextQuestion = useCallback(
     async (userNote: string, tags: string[] = []) => {
+      if (!PRO_FEATURES_ENABLED) return;
       setIsLoading(true);
       setError(null);
 
