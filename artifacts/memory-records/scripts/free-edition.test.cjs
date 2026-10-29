@@ -25,7 +25,7 @@ test("free identity and production mode cannot be overridden by APP_VARIANT", ()
     assert.equal(config.scheme, "memory-records-free");
     assert.equal(config.extra.snapshotTestBuild, false);
     assert.equal(config.extra.edition, "google-play-free");
-    assert.equal(config.android.versionCode, 1);
+    assert.equal(config.android.versionCode, 2);
     assert.equal(load("constants/edition.ts").PRO_FEATURES_ENABLED, false);
   } finally {
     if (old === undefined) delete process.env.APP_VARIANT;
@@ -88,4 +88,46 @@ test("free Help routes only to core documentation, not donation or payment pages
   assert.match(read("app/help.tsx"), /export \{ default \} from "@\/components\/CoreHelp"/);
   assert.doesNotMatch(read("components/CoreHelp.tsx"), /paypal\.com|buymeacoffee\.com|\/api\/unlock/);
   assert.match(read("components/CoreHelp.tsx"), /tree\/google-play-free/);
+  assert.match(read("components/CoreHelp.tsx"), /blob\/google-play-free\/PRIVACY_POLICY\.md/);
+  assert.match(read("components/CoreHelp.tsx"), /Privacy policy \(draft\)/);
+  assert.match(read("components/CoreHelp.tsx"), /portfolio-showcase-marcsebastienb\.replit\.app/);
+  assert.match(read("components/CoreHelp.tsx"), /does not use cookies/);
+});
+
+test("free-edition README and privacy policy link to the portfolio and disclose cookie use", () => {
+  for (const file of ["../../README.md", "README.md"]) {
+    const content = read(file);
+    assert.match(content, /portfolio-showcase-marcsebastienb\.replit\.app/);
+    assert.match(content, /does not use cookies/);
+  }
+  assert.match(read("../../PRIVACY_POLICY.md"), /does not use cookies/);
+});
+
+test("the in-app privacy link has a matching policy file and is identified as a draft", () => {
+  const policyPath = path.join(root, "../../PRIVACY_POLICY.md");
+  const policy = fs.readFileSync(policyPath, "utf8");
+  assert.match(policy, /Privacy Policy.*DRAFT/);
+  assert.match(read("../../README.md"), /Privacy policy draft/);
+  assert.match(read("README.md"), /privacy policy draft/);
+  assert.match(read("components/CoreHelp.tsx"), /blob\/google-play-free\/PRIVACY_POLICY\.md/);
+});
+
+test("free user-facing materials do not name future paid features", () => {
+  const forbiddenFeatureNames = /\b(?:premium|pro|obsidian|voice memos?|voice-memo|AI interviewer|historical events)\b/i;
+  for (const file of ["../../README.md", "README.md", "components/CoreHelp.tsx"]) {
+    assert.doesNotMatch(read(file), forbiddenFeatureNames, `${file} should not advertise unavailable features`);
+  }
+});
+
+test("free native config disables unused microphone and background-audio capabilities", () => {
+  const config = JSON.parse(read("app.json")).expo;
+  const audio = config.plugins.find((p) => Array.isArray(p) && p[0] === "expo-audio")[1];
+  const picker = config.plugins.find((p) => Array.isArray(p) && p[0] === "expo-image-picker")[1];
+  assert.equal(audio.recordAudioAndroid, false);
+  assert.equal(audio.enableBackgroundRecording, false);
+  assert.equal(audio.enableBackgroundPlayback, false);
+  assert.equal(picker.microphonePermission, false);
+  assert.equal(picker.cameraPermission, false);
+  assert.ok(config.android.blockedPermissions.includes("android.permission.RECORD_AUDIO"));
+  assert.ok(config.android.blockedPermissions.includes("android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"));
 });
